@@ -1,0 +1,45 @@
+# Default run configuration for wdp-controller.
+
+# Models served via OpenRouter (https://openrouter.ai/models).
+models:
+  # Strong model used for editing/debugging/final answers.
+  executor: "anthropic/claude-opus-4-7"
+  # Cheap model used for broad context reads and the decompose planner.
+  cheap: "anthropic/claude-haiku-4-5"
+  # Process scorer / LM-judge for non-terminal node values (optional).
+  scorer: "anthropic/claude-haiku-4-5"
+
+# The cost currency the Allocator optimizes against: tokens | latency | dollars.
+# We sweep all three in experiments; this is the default for a single run.
+cost_model: "dollars"
+
+# Per-task inference budget, expressed in the chosen cost currency.
+budget:
+  tokens: 200000
+  latency_s: 120
+  dollars: 1.0
+
+# Allocator settings.
+allocator:
+  policy: "bandit"          # bandit (v0) | bc (v1) | dpo (v1)
+  actions: ["wider", "deeper", "decompose", "stop"]
+  # STOP fires when predicted value-per-cost of all spend-actions < this.
+  stop_threshold: 0.02
+  exploration: "thompson"   # thompson | ucb | epsilon
+
+# Executor settings.
+executor:
+  max_steps: 25
+  temperature: 0.7
+
+# Self-improvement loop.
+loop:
+  rounds: 4
+  train_tasks: 200
+  # Keep traces whose success-per-cost is in the top fraction for BC.
+  bc_keep_fraction: 0.3
+
+# Where artifacts land.
+paths:
+  runs: "runs"
+  traces: "traces"
