@@ -66,8 +66,10 @@ Per spend decision: `value_per_cost = terminal_reward * cost_efficiency * advant
   always positive, keeps discriminating past budget.
 - `advantage_weight` blends a uniform floor with the per-step process-score gain, so the
   decision that moved the verifier signal earns more.
-- STOP decisions are credited by `abstention_reward` (1.0 only if the task was genuinely
-  unsolvable), bypassing the efficiency/advantage terms.
+- STOP decisions are credited by `abstention_credit * abstention_reward` (abstention_credit
+  default 0.5; abstention_reward is 1.0 only if the task was genuinely unsolvable), bypassing
+  the efficiency/advantage terms. The 0.5 scaling keeps a correct abstention below a solve so
+  it can't dominate the value-weighted clone (see bug #4).
 
 ### Benchmarks
 - **Arithmetic** (local, exact + free grading): 110 tasks = 60 atomic (3 difficulty tiers

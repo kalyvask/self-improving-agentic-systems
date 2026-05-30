@@ -10,8 +10,10 @@ The rollout reward is outcome times cost-efficiency,
     R = terminal_reward * exp(-cost_weight * spent/budget),
 the same cost-aware signal `assign_credit` uses, so GRPO optimizes the project's
 thesis metric (cheap solves) rather than raw success. Advantage is the
-group-relative z-score within each prompt's G rollouts -- GRPO's critic-free
-baseline -- and every decision in a rollout inherits its rollout's advantage.
+mean-centered group-relative reward within each prompt's G rollouts -- GRPO's
+critic-free baseline, with the std division dropped (Dr. GRPO; dividing by a tiny
+all-solve-group std amplified cost jitter into spurious advantages) -- and every
+decision in a rollout inherits its rollout's advantage.
 """
 from __future__ import annotations
 

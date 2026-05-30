@@ -33,6 +33,8 @@ class RunConfig:
     solved_threshold: float = 0.99       # terminal score at/above which a task is "solved"
     max_decisions: int = 12              # hard cap on allocation steps per task
     deeper_extra_steps: int = 6
+    cost_weight: float = 0.5             # credit cost-efficiency steepness (thesis knob)
+    abstention_credit: float = 0.5       # scale on correct-STOP credit (< solve scale)
 
 
 def _features(
@@ -177,7 +179,8 @@ def run_task(
     if not trace.solved and score_abstention is not None:
         trace.abstention_reward = float(score_abstention(task).value)
     trace.total_cost = ledger.snapshot()
-    assign_credit(trace, budget=cfg.budget)
+    assign_credit(trace, budget=cfg.budget, cost_weight=cfg.cost_weight,
+                  abstention_credit=cfg.abstention_credit)
     return trace
 
 

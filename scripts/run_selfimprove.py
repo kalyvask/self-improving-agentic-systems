@@ -73,6 +73,10 @@ def main() -> None:
     ap.add_argument("--currency", choices=["tokens", "latency", "dollars"], default="dollars")
     ap.add_argument("--budget", type=float, default=0.2)
     ap.add_argument("--max-decisions", type=int, default=4)
+    ap.add_argument("--cost-weight", type=float, default=0.5,
+                    help="credit cost-efficiency steepness exp(-cost_weight*spent/budget)")
+    ap.add_argument("--abstention-credit", type=float, default=0.5,
+                    help="scale on correct-STOP credit; keep below the solve scale")
     # Arithmetic-suite knobs.
     ap.add_argument("--atomic", type=int, default=8)
     ap.add_argument("--multi", type=int, default=6)
@@ -101,7 +105,9 @@ def main() -> None:
     cfg = load_config()
 
     run_cfg = RunConfig(currency=args.currency, budget=args.budget,
-                        max_decisions=args.max_decisions)
+                        max_decisions=args.max_decisions,
+                        cost_weight=args.cost_weight,
+                        abstention_credit=args.abstention_credit)
     out = args.out or str(Path(cfg["paths"]["traces"]) / "traces.jsonl")
     trace_log = TraceLog(out)
 
