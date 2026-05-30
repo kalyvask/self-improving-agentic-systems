@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from wdp.allocator.policy import BanditAllocator
 from wdp.allocator.bc import BCAllocator
 from wdp.allocator.dpo import DPOAllocator
+from wdp.allocator.kto import KTOAllocator
 from wdp.executor.react import Executor, Task
 from wdp.loop.runner import RunConfig, run_round
 from wdp.loop.trace import TaskTrace
@@ -40,7 +41,9 @@ def _make_learner(kind: str, keep_fraction: float, seed: int | None):
         return BCAllocator(keep_fraction=keep_fraction, seed=seed)
     if kind == "dpo":
         return DPOAllocator(keep_fraction=keep_fraction, seed=seed)
-    raise ValueError(f"unknown learner {kind!r}; expected 'bc' or 'dpo'")
+    if kind == "kto":
+        return KTOAllocator(keep_fraction=keep_fraction, seed=seed)
+    raise ValueError(f"unknown learner {kind!r}; expected 'bc', 'dpo', or 'kto'")
 
 
 def self_improve(

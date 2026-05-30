@@ -26,6 +26,11 @@ def _softmax(z: np.ndarray) -> np.ndarray:
     return e / e.sum(axis=1, keepdims=True)
 
 
+def _log_softmax(z: np.ndarray) -> np.ndarray:
+    z = z - z.max(axis=1, keepdims=True)
+    return z - np.log(np.exp(z).sum(axis=1, keepdims=True))
+
+
 def _sigmoid(x: np.ndarray) -> np.ndarray:
     return 1.0 / (1.0 + np.exp(-x))
 
@@ -90,6 +95,72 @@ class LinearSoftmaxPolicy:
         for _ in range(self.epochs):
             p = _softmax(Xs @ self.W.T + self.b)
             g = (p - onehot) * w[:, None]          # (n, A)
+            dW = g.T @ Xs / n + self.l2 * self.W
+            db = g.mean(axis=0)
+            self.W -= self.lr * dW
+            self.b -= self.lr * db
+        self._fitted = True
+
+    # ---- KTO -------------------------------------------------------------
+    def fit_kto(
+        self,
+        X: np.ndarray,
+        actions: np.ndarray,
+        desirable: np.ndarray,
+        reference: "LinearSoftmaxPolicy",
+        *,
+        beta: float = 0.1,
+        lambda_d: float = 1.0,
+        lambda_u: float = 1.0,
+    ) -> None:
+        """Kahneman-Tversky Optimization in the contextual-bandit reduction.
+
+        Unlike DPO, KTO needs no preference *pairs*: each logged decision is an
+        independent (state, action) example tagged desirable or undesirable. That
+        is exactly what our traces give us (a decision's realized value-per-cost
+        thresholded), so KTO sidesteps the bucket-and-pair approximation DPO leans
+        on -- and uses every decision, which matters in our tiny-trace regime.
+
+        For example (x, a) with implicit reward
+            r = beta * (logp_theta(a|x) - logp_ref(a|x))
+        and a batch KL baseline z = clamp(mean_batch(r_detached), min=0):
+            desirable:   L = lambda_d * (1 - sigmoid(beta*(r - z)))
+            undesirable: L = lambda_u * (1 - sigmoid(beta*(z - r)))
+        Gradients flow through logp_theta(a|x) only (z is detached, recomputed per
+        epoch). We warm-start from the reference and share its scaler, like DPO, so
+        the implicit-reward anchoring is meaningful and the BC/DPO/KTO comparison
+        stays on equal footing (same model, same features, same reference)."""
+        X = np.atleast_2d(X).astype(np.float64)
+        actions = np.asarray(actions, dtype=int)
+        desirable = np.asarray(desirable, dtype=bool)
+        n = len(X)
+
+        self.mu, self.sigma = reference.mu.copy(), reference.sigma.copy()
+        self.W, self.b = reference.W.copy(), reference.b.copy()
+        Xs = self._scale(X)
+
+        ref_logp = _log_softmax(Xs @ reference.W.T + reference.b)
+        ref_logp_a = ref_logp[np.arange(n), actions]
+        idx = np.arange(n)
+
+        for _ in range(self.epochs):
+            logits = Xs @ self.W.T + self.b
+            p = _softmax(logits)
+            logp = _log_softmax(logits)
+            r = beta * (logp[idx, actions] - ref_logp_a)        # implicit reward
+            z = max(0.0, float(r.mean()))                       # detached KL baseline
+
+            # dL/dr per example (z held constant this step).
+            u = beta * (r - z)
+            v = beta * (z - r)
+            dL_dr = np.where(
+                desirable,
+                -lambda_d * beta * _sigmoid(u) * _sigmoid(-u),
+                +lambda_u * beta * _sigmoid(v) * _sigmoid(-v),
+            )
+            # dr/dlogit_k = beta * ([k==a] - p_k); chain through dL/dr.
+            g = -p * (dL_dr * beta)[:, None]                    # (n, A), the -p_k term
+            g[idx, actions] += (dL_dr * beta)                   # add the [k==a] term
             dW = g.T @ Xs / n + self.l2 * self.W
             db = g.mean(axis=0)
             self.W -= self.lr * dW

@@ -68,7 +68,7 @@ def _build_taubench(args, cfg, client):
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--benchmark", choices=["arithmetic", "taubench"], default="arithmetic")
-    ap.add_argument("--learner", choices=["bc", "dpo"], default="bc")
+    ap.add_argument("--learner", choices=["bc", "dpo", "kto"], default="bc")
     ap.add_argument("--rounds", type=int, default=3)
     ap.add_argument("--currency", choices=["tokens", "latency", "dollars"], default="dollars")
     ap.add_argument("--budget", type=float, default=0.2)

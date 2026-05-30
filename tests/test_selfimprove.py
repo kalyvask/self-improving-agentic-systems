@@ -80,6 +80,43 @@ def test_self_improve_dpo_runs():
     assert reports[1].policy == "dpo"
 
 
+def test_self_improve_kto_runs():
+    ex, pl, vf, tm = _stack()
+    train = [Task(id=f"tr{i}", prompt="q") for i in range(6)]
+    eval_ = [Task(id=f"ev{i}", prompt="q") for i in range(2)]
+    reports = self_improve(train, eval_, ex, vf, tm, planner=pl, learner="kto",
+                           rounds=1, cfg=RunConfig(max_decisions=3), seed=0)
+    assert len(reports) == 2
+    assert reports[1].policy == "kto"
+
+
+def test_kto_prefers_desirable_action_over_reference():
+    # KTO needs no pairs: tag each decision good/bad by value_per_cost and it
+    # should push probability toward the desirable action and away from the
+    # undesirable one, relative to the BC reference it warm-starts from.
+    import numpy as np
+    from wdp.allocator.kto import KTOAllocator
+    from wdp.allocator.bc import _INDEX
+    from wdp.allocator.policy import Action
+
+    feats = [1.0] + [0.0] * 11   # a single fixed state (12-dim feature vector)
+    good = TaskTrace(task_id="g", currency="dollars", policy="bandit",
+                     solved=True, terminal_reward=1.0)
+    good.add(DecisionRecord(step=0, features=feats, action="wider",
+                            value_per_cost=0.9))
+    bad = TaskTrace(task_id="b", currency="dollars", policy="bandit")
+    bad.add(DecisionRecord(step=0, features=feats, action="deeper",
+                           value_per_cost=0.0))
+
+    kto = KTOAllocator(keep_fraction=1.0, seed=0)
+    kto.fit([good, bad])
+    p = kto.policy.probs(np.asarray(feats))
+    ref = kto.reference.policy.probs(np.asarray(feats))
+    w, d = _INDEX[Action.WIDER.value], _INDEX[Action.DEEPER.value]
+    assert p[w] > ref[w]   # desirable action gains probability
+    assert p[d] < ref[d]   # undesirable action loses it
+
+
 def test_arithmetic_benchmark_offline():
     b = ArithmeticBenchmark(n_atomic=3, n_multi=2, n_underspecified=1, seed=0)
     tasks = b.tasks()
