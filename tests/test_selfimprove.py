@@ -205,5 +205,12 @@ def test_structural_features_tool_error_and_done_frac():
                       cfg=RunConfig(budget=1.0), decomposability=0.0)
     assert abs(feats.tool_error_rate - 2 / 3) < 1e-9
     assert feats.attempts_done_frac == 0.5
+    # Difficulty is pinned to the FIRST attempt's process score (1 - 0.5), not the
+    # best-so-far, so it reads intrinsic hardness even as score_max climbs.
+    assert abs(feats.difficulty - 0.5) < 1e-9
+    # Before any attempt is scored, difficulty is the neutral 0.5 prior.
+    blank = _features([], [], ledger=CostLedger(), cfg=RunConfig(budget=1.0),
+                      decomposability=0.0)
+    assert blank.difficulty == 0.5
     # vector() and names() stay in lockstep so the policy auto-sizes.
-    assert len(feats.vector()) == len(NodeFeatures.names()) == 11
+    assert len(feats.vector()) == len(NodeFeatures.names()) == 12

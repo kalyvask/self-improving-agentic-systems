@@ -62,6 +62,13 @@ class NodeFeatures:
     #     finish them; high but unsolved => a fresh WIDER is likelier to help.
     tool_error_rate: float = 0.0
     attempts_done_frac: float = 0.0
+    # Task difficulty proxy in [0,1], pinned to the FIRST attempt's process score
+    # (difficulty = 1 - first_score), so it stays roughly fixed across the run
+    # while score_max climbs. This is the lever that lets the policy condition the
+    # WIDER-vs-DEEPER choice on difficulty rather than picking a fixed mix:
+    # Snell et al. (arXiv:2408.03314) show the compute-optimal parallel/sequential
+    # split flips with difficulty. 0.5 = unknown (no attempt scored yet).
+    difficulty: float = 0.5
 
     def vector(self) -> np.ndarray:
         return np.array(
@@ -77,6 +84,7 @@ class NodeFeatures:
                 self.executor_stalled,
                 self.tool_error_rate,
                 self.attempts_done_frac,
+                self.difficulty,
             ],
             dtype=np.float64,
         )
@@ -88,6 +96,7 @@ class NodeFeatures:
             "budget_remaining_frac", "depth", "steps_taken",
             "decomposability", "executor_stalled",
             "tool_error_rate", "attempts_done_frac",
+            "difficulty",
         ]
 
 

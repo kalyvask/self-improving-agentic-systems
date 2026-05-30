@@ -56,6 +56,11 @@ def _features(
     tool_error_rate = n_err / len(all_steps) if all_steps else 0.0
     n_done = sum(1 for t in trajectories if t.final_answer is not None)
     attempts_done_frac = n_done / len(trajectories) if trajectories else 0.0
+    # Difficulty pinned to the first attempt's process score (1 - first_score);
+    # 0.5 = unknown before any attempt has been scored. Unlike score_max (which
+    # rises as we improve) this stays put, so the policy can read intrinsic task
+    # hardness and condition WIDER-vs-DEEPER on it.
+    difficulty = (1.0 - process_scores[0]) if process_scores else 0.5
     return NodeFeatures(
         score_mean=float(statistics.fmean(scores)),
         score_max=float(max(scores)),
@@ -68,6 +73,7 @@ def _features(
         executor_stalled=stalled,
         tool_error_rate=tool_error_rate,
         attempts_done_frac=attempts_done_frac,
+        difficulty=difficulty,
     )
 
 
