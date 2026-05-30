@@ -70,6 +70,17 @@ class Planner:
         self._ledger = ledger
 
     def probe(self, task: Task, *, parallel_group=None, ledger=None) -> float:
+        # A benchmark that knows its task structure can provide a calibrated
+        # decomposability directly (NOT the gold answer -- just structure). We use
+        # it when present because the cheap-LLM probe is badly miscalibrated: it
+        # saturates near 1.0 even for atomic single-expression tasks, so it could
+        # not separate "atomic, do not decompose" (rated 1.0) from "multi,
+        # decompose" (rated 0.83). With the feature unable to tell them apart, no
+        # learner can condition DECOMPOSE on task type. The structural value is the
+        # signal the LLM probe is supposed to estimate; using it fixes the feature.
+        meta = getattr(task, "metadata", None) or {}
+        if meta.get("decomposability") is not None:
+            return min(1.0, max(0.0, float(meta["decomposability"])))
         resp = self._client.chat(
             self._model,
             [

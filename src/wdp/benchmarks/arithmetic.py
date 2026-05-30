@@ -128,7 +128,8 @@ class ArithmeticBenchmark:
             out.append(Task(
                 id=f"atomic-{i}",
                 prompt=f"Compute {expr}. Use the calc tool, then FINISH with the integer.",
-                metadata={"gold": safe_eval(expr), "kind": "atomic", "tier": tier},
+                metadata={"gold": safe_eval(expr), "kind": "atomic", "tier": tier,
+                          "decomposability": 0.0},   # single expression: do not decompose
             ))
 
         # Multi-part tasks vary in how many sub-results must be combined (2-5), so
@@ -146,7 +147,10 @@ class ArithmeticBenchmark:
                 id=f"multi-{i}",
                 prompt=(f"Separately {steps}. Then FINISH with the sum of all "
                         f"{n_parts} results."),
-                metadata={"gold": gold, "kind": "multi", "n_parts": n_parts},
+                metadata={"gold": gold, "kind": "multi", "n_parts": n_parts,
+                          # graded by part count so the policy sees "more parts =
+                          # more decomposable": 2->0.25 .. 5->1.0
+                          "decomposability": round(min(1.0, (n_parts - 1) / 4.0), 2)},
             ))
 
         for i in range(self.n_underspecified):
@@ -154,7 +158,7 @@ class ArithmeticBenchmark:
                 id=f"underspecified-{i}",
                 prompt=("Compute the value of x. (No value of x is given anywhere.) "
                         "If it cannot be determined, STALL."),
-                metadata={"gold": None, "kind": "underspecified"},
+                metadata={"gold": None, "kind": "underspecified", "decomposability": 0.0},
             ))
 
         rng.shuffle(out)

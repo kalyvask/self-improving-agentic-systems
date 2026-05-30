@@ -158,19 +158,23 @@ def run_task(
             if new_traj is not None:
                 trajectories.append(new_traj)
 
-        # Score whatever we just produced (cheap process verifier).
+        # Score whatever we just produced. For a COMPLETED trajectory the terminal
+        # grade is exact (and free on arithmetic; env-carried on tau-bench), so use
+        # it as the process score rather than paying the cheap LLM scorer -- which
+        # is near-noise (it rated unsolvable tasks 0.95 while terminal=0), corrupting
+        # the score features and wasting spend. The LLM scorer is used only for
+        # genuinely partial trajectories where no terminal grade exists yet.
         ps = feats.score_max
         if new_traj is not None:
-            ps = verifier.score_step(task, new_traj.transcript(), ledger=ledger).value
-            process_scores.append(ps)
-            # If it produced a final answer, get the ground-truth terminal score.
-            # Env-graded attempts (tau-bench) already carry their reward; trust it
-            # rather than re-grading a text answer that isn't the unit of success.
             if new_traj.final_answer is not None:
                 tv = (new_traj.reward if new_traj.reward is not None
                       else terminal.score_final(task, new_traj.final_answer).value)
+                ps = tv
                 if tv >= best_terminal:
                     best_terminal, best_answer = tv, new_traj.final_answer
+            else:
+                ps = verifier.score_step(task, new_traj.transcript(), ledger=ledger).value
+            process_scores.append(ps)
 
         cost_after = ledger.amount(cfg.currency)
         trace.add(DecisionRecord(

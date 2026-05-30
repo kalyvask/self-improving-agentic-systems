@@ -76,11 +76,14 @@ def self_improve(
             return accumulated
         return accumulated[-fit_window * len(train_tasks):]
 
-    def _eval(alloc, name) -> dict:
+    def _eval(alloc, name, rnd) -> dict:
         # Eval is greedy (explore=False): we measure the policy we would deploy,
-        # not the exploring data-collection policy.
+        # not the exploring data-collection policy. Eval traces are tagged with the
+        # round (name@rN) so persisted eval files keep each round distinct -- without
+        # the tag, every round writes the same policy label and grouping by policy in
+        # analysis silently overwrites/mixes intermediate rounds.
         ev = run_round(eval_tasks, alloc, executor, verifier, terminal,
-                       planner=planner, cfg=cfg, policy_name=name,
+                       planner=planner, cfg=cfg, policy_name=f"{name}@r{rnd}",
                        explore=False, update=False, difficulty_fn=difficulty_fn,
                        trace_log=eval_trace_log)
         return summarize_round(ev, cfg.currency)
@@ -94,7 +97,7 @@ def self_improve(
     reports.append(RoundReport(
         round=0, policy="bandit",
         train=summarize_round(train_traces, cfg.currency),
-        eval=_eval(bandit, "bandit"),
+        eval=_eval(bandit, "bandit", 0),
         n_accumulated_traces=len(accumulated),
     ))
 
@@ -109,7 +112,7 @@ def self_improve(
         reports.append(RoundReport(
             round=r, policy=learner,
             train=summarize_round(train_traces, cfg.currency),
-            eval=_eval(alloc, learner),
+            eval=_eval(alloc, learner, r),
             n_accumulated_traces=len(accumulated),
         ))
 
