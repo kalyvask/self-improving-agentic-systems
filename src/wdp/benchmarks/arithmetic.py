@@ -108,29 +108,36 @@ class ArithmeticBenchmark:
         rng = random.Random(self.seed)
         out: list[Task] = []
 
-        # Atomic tasks span a difficulty gradient (tier 0-2): a flat eval looks the
+        # Atomic tasks span a difficulty gradient (tier 0-3): a flat eval looks the
         # same at every difficulty and tells the WIDER-vs-DEEPER split nothing, so
         # we vary nesting depth. Tier rises with i so a large suite is graded, not
         # uniform. Only +,-,* keep golds exact integers (no rounding ambiguity).
+        # Tier 3 adds a third nesting level so one careless WIDER pass is unlikely to
+        # track it -- that is where DEEPER refinement should start to pay off.
         for i in range(self.n_atomic):
             r = lambda: rng.randint(2, 20)
-            tier = i % 3
+            tier = i % 4
             if tier == 0:                                   # easy: one operation
                 expr = rng.choice([f"{r()} + {r()}", f"{r()} * {r()}"])
             elif tier == 1:                                 # medium: one nesting
                 expr = f"{r()} * ({r()} + {r()})"
-            else:                                           # hard: deeper nesting
+            elif tier == 2:                                 # hard: two sub-expressions
                 expr = f"({r()} + {r()}) * ({r()} - {r()}) + {r()}"
+            else:                                           # very hard: three levels
+                expr = f"(({r()} + {r()}) * {r()} - {r()}) * ({r()} + {r()})"
             out.append(Task(
                 id=f"atomic-{i}",
                 prompt=f"Compute {expr}. Use the calc tool, then FINISH with the integer.",
                 metadata={"gold": safe_eval(expr), "kind": "atomic", "tier": tier},
             ))
 
-        # Multi-part tasks vary in how many sub-results must be combined (2-4), so
-        # DECOMPOSE has a real, graded payoff that grows with the part count.
+        # Multi-part tasks vary in how many sub-results must be combined (2-5), so
+        # DECOMPOSE has a real, graded payoff that grows with the part count. At 5
+        # parts a single trajectory tends to drop or misadd one term, so decomposing
+        # into independent sub-tasks becomes structurally the better move -- giving
+        # the controller a regime where DECOMPOSE genuinely beats WIDER/DEEPER.
         for i in range(self.n_multi):
-            n_parts = 2 + (i % 3)                           # 2, 3, or 4 parts
+            n_parts = 2 + (i % 4)                           # 2, 3, 4, or 5 parts
             parts = [f"{rng.randint(2, 15)} * {rng.randint(2, 15)}"
                      for _ in range(n_parts)]
             gold = safe_eval(" + ".join(f"({p})" for p in parts))
