@@ -137,11 +137,14 @@ def main() -> None:
             difficulty_fn = RolloutProcessVerifier(
                 executor, terminal, n_rollouts=args.diff_rollouts).difficulty
 
+        eval_out = out.replace(".jsonl", "") + "_eval.jsonl"
+        eval_trace_log = TraceLog(eval_out)
         reports = self_improve(
             train, eval_, executor, verifier, terminal,
             planner=planner, learner=args.learner, rounds=args.rounds,
             cfg=run_cfg, keep_fraction=cfg["loop"]["bc_keep_fraction"],
             seed=args.seed, fit_window=args.fit_window, trace_log=trace_log,
+            eval_trace_log=eval_trace_log,
             difficulty_fn=difficulty_fn,
         )
 

@@ -61,6 +61,7 @@ def self_improve(
     seed: int | None = 0,
     fit_window: int | None = None,
     trace_log=None,
+    eval_trace_log=None,
     difficulty_fn=None,
 ) -> list[RoundReport]:
     cfg = cfg or RunConfig()
@@ -80,7 +81,8 @@ def self_improve(
         # not the exploring data-collection policy.
         ev = run_round(eval_tasks, alloc, executor, verifier, terminal,
                        planner=planner, cfg=cfg, policy_name=name,
-                       explore=False, update=False, difficulty_fn=difficulty_fn)
+                       explore=False, update=False, difficulty_fn=difficulty_fn,
+                       trace_log=eval_trace_log)
         return summarize_round(ev, cfg.currency)
 
     # Round 0: bandit cold start.

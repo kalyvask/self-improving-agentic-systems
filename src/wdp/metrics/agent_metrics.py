@@ -132,9 +132,21 @@ def summarize_round(traces: list[TaskTrace], currency: str = "dollars") -> dict:
     """One-line-per-round scoreboard used to plot the self-improvement curve."""
     costs = [t.total_cost.get(currency, 0.0) for t in traces]
     solved = [t for t in traces if t.solved]
+    n = len(traces)
+    # Raw solve_rate counts genuinely-unsolvable tasks (underspecified) as failures,
+    # even when the right move (STOP) was taken. Report two honest companions:
+    #   - solvable_solve_rate: solve rate over only the tasks that CAN be solved.
+    #   - utility_rate: solved OR correctly abstained (STOP on an unsolvable task).
+    # A task is "unsolvable" when it earned abstention credit (abstention_reward high).
+    unsolvable = [t for t in traces if (not t.solved) and t.abstention_reward >= 0.5]
+    stopped = [t for t in unsolvable
+               if any(d.action == "stop" for d in t.decisions)]
+    n_solvable = n - len(unsolvable)
     return {
-        "n": len(traces),
-        "solve_rate": (len(solved) / len(traces)) if traces else 0.0,
+        "n": n,
+        "solve_rate": (len(solved) / n) if n else 0.0,
+        "solvable_solve_rate": (len(solved) / n_solvable) if n_solvable else 0.0,
+        "utility_rate": ((len(solved) + len(stopped)) / n) if n else 0.0,
         "mean_cost": float(statistics.fmean(costs)) if costs else 0.0,
         "p95_cost": percentile(costs, 95.0),
         "cvar95_cost": cvar(costs, 0.95),
