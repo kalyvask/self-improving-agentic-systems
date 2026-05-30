@@ -382,6 +382,28 @@ precision plateaus without a real verifier). So fix the verifier first, then all
   spend only after steps 3-4.
 - (Also available: AB-MCTS Thompson WIDER/DEEPER router; power-law STOP rule.)
 
+### Design note: better-judge vs escalate are two DIFFERENT ceilings (do both, in order)
+A second model asked whether escalation or "a better judge that trains the simpler model" is
+the optimal next move. They are not substitutes -- they lift different ceilings:
+- **Better judge / teacher (train-time)** fixes the *decision* ceiling. A strong LLM as the
+  process verifier (or Math-Shepherd rollout labels) gives the controller a trustworthy signal,
+  so it learns *when* to DECOMPOSE / DEEPER / STOP. Paid once at train time; inference stays
+  cheap. It CANNOT make the executor solve a task it is incapable of -- it only improves which
+  action the controller picks. (Note: we cannot fine-tune Haiku via API, so "train the simpler
+  model" here means train the linear CONTROLLER on better-judged credit, not fine-tune the LLM.)
+- **Escalate to a stronger model (inference-time)** fixes the *capability* ceiling. It is the
+  only action that can solve a task Haiku cannot, and it makes the cost metric meaningful
+  (~10-15x price gap), turning the flat curve into a real cost-vs-accuracy frontier.
+- **Our data says do the judge first.** The arithmetic gap is the multi-part tasks (0.65), and
+  the controller rarely DECOMPOSES (0.04-0.10) -- so part of the gap is a *decision* problem a
+  better judge can close (teach it to decompose), with no inference-time spend. Escalation then
+  adds the capability lever on top, giving a 3-way cost choice (DEEPER vs DECOMPOSE cheap-Haiku
+  vs ESCALATE expensive-Opus). The capstone result is the controller learning a cost-aware
+  cascade: "solve cheaply with Haiku / decompose; escalate only when truly stuck." That hybrid
+  (strong teacher at train, cheap student + escalation valve at inference) is also the standard
+  production pattern. Sequence: **judge/verifier (step 3) -> escalate (step 4) -> tau-bench on
+  paired cost (step 5).**
+
 ### Cross-check + refinements (independent second-tool analysis + our offline tests)
 An independent analysis converged on the SAME diagnosis (verifier-first; STOP-credit
 asymmetry; GRPO needs dynamic sampling; not enough allocation headroom; add AB-MCTS),
