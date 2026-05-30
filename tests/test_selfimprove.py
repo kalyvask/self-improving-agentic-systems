@@ -117,6 +117,55 @@ def test_kto_prefers_desirable_action_over_reference():
     assert p[d] < ref[d]   # undesirable action loses it
 
 
+def test_grpo_update_shifts_probability_toward_high_advantage_action():
+    # One fixed state. WIDER rollouts get positive group-relative advantage,
+    # DEEPER rollouts negative. A GRPO update must raise p(WIDER) and lower
+    # p(DEEPER) relative to the BC reference it warm-starts from.
+    import numpy as np
+    from wdp.allocator.linear import LinearSoftmaxPolicy
+    from wdp.allocator.bc import _INDEX
+    from wdp.allocator.policy import Action, NodeFeatures
+
+    F = len(NodeFeatures.names())
+    feats = [1.0] + [0.0] * (F - 1)
+    ref = LinearSoftmaxPolicy(n_features=F, n_actions=4, seed=0)
+    ref.fit_bc(np.array([feats, feats]), np.array([0, 1]))   # sets scaler, _fitted
+    pol = LinearSoftmaxPolicy(n_features=F, n_actions=4, seed=0)
+    pol.mu, pol.sigma = ref.mu.copy(), ref.sigma.copy()
+    pol.W, pol.b = ref.W.copy(), ref.b.copy()
+
+    w, d = _INDEX[Action.WIDER.value], _INDEX[Action.DEEPER.value]
+    X = [feats] * 6
+    actions = [w, w, w, d, d, d]
+    advs = [1.0, 1.0, 1.0, -1.0, -1.0, -1.0]
+    pol.grpo_update(np.array(X), np.array(actions), np.array(advs),
+                    reference=ref, beta_kl=0.0, inner_epochs=20)
+    p, p_ref = pol.probs(np.array(feats)), ref.probs(np.array(feats))
+    assert p[w] > p_ref[w]
+    assert p[d] < p_ref[d]
+
+
+def test_grpo_train_runs_with_fake_stack():
+    from wdp.loop.runner import run_round
+    from wdp.allocator.policy import BanditAllocator
+    from wdp.loop.grpo_train import grpo_train, format_grpo_curve
+
+    ex, pl, vf, tm = _stack()
+    train = [Task(id=f"tr{i}", prompt="q") for i in range(4)]
+    eval_ = [Task(id=f"ev{i}", prompt="q") for i in range(2)]
+    cfg = RunConfig(max_decisions=3)
+    seed = run_round(train, BanditAllocator(seed=0), ex, vf, tm, planner=pl,
+                     cfg=cfg, policy_name="bandit", explore=True)
+    reports, alloc = grpo_train(
+        seed, train, eval_, ex, vf, tm, planner=pl, cfg=cfg,
+        group_size=2, prompts_per_step=2, num_steps=2, eval_every=1, seed=0)
+    assert reports[0].step == 0 and reports[-1].step == 2
+    assert reports[-1].n_rollouts == 2 * 2 * 2          # steps*prompts*group
+    for r in reports:
+        assert {"solve_rate", "mean_cost", "p95_cost", "gen_verif_gap"} <= set(r.eval)
+    assert "step" in format_grpo_curve(reports)
+
+
 def test_arithmetic_benchmark_offline():
     b = ArithmeticBenchmark(n_atomic=3, n_multi=2, n_underspecified=1, seed=0)
     tasks = b.tasks()

@@ -167,6 +167,62 @@ class LinearSoftmaxPolicy:
             self.b -= self.lr * db
         self._fitted = True
 
+    # ---- GRPO ------------------------------------------------------------
+    def grpo_update(
+        self,
+        X: np.ndarray,
+        actions: np.ndarray,
+        advantages: np.ndarray,
+        reference: "LinearSoftmaxPolicy",
+        *,
+        beta_kl: float = 0.05,
+        inner_epochs: int = 5,
+    ) -> None:
+        """One GRPO update on a batch of on-policy rollout decisions.
+
+        GRPO's defining move is the group-relative advantage: each prompt is rolled
+        out G times, and a rollout's reward is centered and scaled by its own
+        group's mean/std (computed by the driver) -- so no learned critic is
+        needed. Here every decision in a rollout inherits that rollout's advantage.
+
+        On a linear policy this reduces to a contextual-bandit policy gradient. We
+        maximize the advantage-weighted log-likelihood with a KL anchor to the
+        frozen BC reference (GRPO keeps a reference-KL term; on a small stable
+        policy this, not PPO clipping, is what controls the few inner epochs of
+        off-policy reuse per batch):
+
+            maximize  mean_i A_i * logp_theta(a_i|x_i)  -  beta_kl * mean_i KL(theta||ref)
+
+        Call once per fresh-rollout batch (inner_epochs cheap CPU passes over it),
+        which matches the estimator's num_steps fresh-rollout-batch cost model.
+        Warm-start from the reference once (driver does this) so the scaler and the
+        KL anchor are meaningful.
+        """
+        X = np.atleast_2d(X).astype(np.float64)
+        actions = np.asarray(actions, dtype=int)
+        adv = np.asarray(advantages, dtype=np.float64)
+        n = len(X)
+        if n == 0:
+            return
+        Xs = self._scale(X)
+        ref_logp = _log_softmax(Xs @ reference.W.T + reference.b)
+        onehot = np.zeros((n, self.n_actions))
+        onehot[np.arange(n), actions] = 1.0
+
+        for _ in range(inner_epochs):
+            logits = Xs @ self.W.T + self.b
+            p = _softmax(logits)
+            logp = _log_softmax(logits)
+            # Policy-gradient term: d/dlogit of -mean(A * logp(a)) = A*(p - onehot).
+            g = adv[:, None] * (p - onehot)
+            # KL(theta||ref) gradient wrt logits: p * ((logp-ref) - E_p[logp-ref]).
+            d = logp - ref_logp
+            g_kl = p * (d - (p * d).sum(axis=1, keepdims=True))
+            g = g / n + beta_kl * g_kl / n
+            self.W -= self.lr * (g.T @ Xs + self.l2 * self.W)
+            self.b -= self.lr * g.sum(axis=0)
+        self._fitted = True
+
     # ---- DPO -------------------------------------------------------------
     def fit_dpo(
         self,
