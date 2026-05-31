@@ -183,15 +183,25 @@ def main() -> None:
             difficulty_fn = RolloutProcessVerifier(
                 executor, terminal, n_rollouts=args.diff_rollouts).difficulty
 
-        # ESCALATE target: a stronger (pricier) executor the controller can hand a
-        # step to. Built with the SAME tools as the cheap executor so only the model
-        # differs; billed into the same ledger at its real price. Absent => the
-        # ESCALATE action is masked in the runner and the loop is the usual 4-action one.
+        # ESCALATE target: a stronger (pricier) executor the controller can hand a step
+        # to, billed into the same ledger at its real price. It must be the SAME executor
+        # CLASS as the cheap one (only the model differs) -- a generic Executor for
+        # arithmetic, a TauReActExecutor (env + user simulator) for tau-bench. Absent =>
+        # ESCALATE is masked in the runner and the loop is the usual 4-action one.
         strong_executor = None
         if args.escalate_model:
-            strong_executor = Executor(client, args.escalate_model, tools=bench.tools(),
-                                       max_steps=cfg["executor"]["max_steps"],
-                                       temperature=cfg["executor"]["temperature"])
+            if args.benchmark == "taubench":
+                from wdp.benchmarks import TauReActExecutor
+                strong_executor = TauReActExecutor(
+                    client=client, model=args.escalate_model,
+                    env_name=args.env, split=args.tb_split,
+                    user_model=args.user_model, user_provider=args.user_provider,
+                    max_steps=cfg["executor"]["max_steps"],
+                    temperature=cfg["executor"]["temperature"])
+            else:
+                strong_executor = Executor(client, args.escalate_model, tools=bench.tools(),
+                                           max_steps=cfg["executor"]["max_steps"],
+                                           temperature=cfg["executor"]["temperature"])
             print(f"ESCALATE target model: {args.escalate_model}")
 
         eval_trace_log = TraceLog(eval_out)   # eval_out defined above with the overwrite guard
