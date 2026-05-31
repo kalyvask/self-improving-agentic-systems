@@ -128,8 +128,24 @@ saving (always-escalate genuinely ~optimal, policy was right); claude-3-haiku (0
 casc5_B_cw15 (cascade), casc2_C_haikuonly (ceiling). This is a SEPARATE experiment from calib4
 (different cheap/strong pair; not mixed into single-model numbers). Remaining optional: push
 cost-weight higher / let policy retry cheap before escalating (more saving toward ~60% theoretical);
-tau-bench transfer (credibility); Opus as strong target if a bigger lift is wanted. Phase 4 alt-test
-is structurally satisfied (rescue gate conditions escalation on the cheap-attempt outcome).
+tau-bench transfer (credibility); Opus as strong target if a bigger lift is wanted.
+
+HONEST CAVEATS (from external review, all verified in traces -- do NOT overclaim):
+- **Win is on MEAN cost; TAIL gets worse.** cascade p95 ~$0.00203 vs haiku-only ~$0.00169 (escalated
+  task pays cheap + strong). Report both; a CVaR/tail-aware objective is future work.
+- **Over-escalates.** escalated 10/24 but only 2 were truly cheap-unsolvable; 8 were recoverable by a
+  cheap retry. So "selective" is crude (escalates after ONE miss). Real next lever = one cheap RETRY
+  before ESCALATE when cheap marginal cost is low -> should cut escalations and lower mean AND tail.
+- **Cheap baseline is ~0.96, not 0.88.** claude-3-haiku bandit@r0 = 0.96 @ $0.00043; dpo@r2 = 0.88.
+  The "recovers 0.88->1.00" sub-story understated the baseline; report cheap-only at its best.
+- **Escalation trigger = FREE EXACT grader, not a validated cheap verifier.** A failed cheap attempt
+  scores exactly 0 on this arithmetic suite, so "did cheap fail" is known for free. Phase 4 alt-test
+  is NOT satisfied here (no cheap verifier was validated) -- that is precisely what a tau-bench
+  transfer would have to establish. Earlier note that it was "structurally satisfied" was too generous.
+- **budget is a credit-normalization knob, NOT a hard cap.** Runner checks budget AFTER each action,
+  so a single cascade task can spend 2.7x budget ($0.00216 at budget 0.0008). Never describe as a cap.
+Tooling: `analyze_eval.py --ab2 FILE_A FILE_B` now does the cross-file paired comparison (was an
+inline script); reports mean AND p95.
 
 **PHASE 5 RESULT v1 (uncalibrated budget -- cascade NOT selective; diagnosed + re-running):**
 ESCALATE built (Phase 3, 52 tests). 3-arm eval (60 graded no-calc tasks, budget 0.02, dpo@r2):
@@ -179,7 +195,8 @@ true DEEPER review-revise mode (needs executor support).
 
 ## >>> earlier PICK UP notes (still relevant for context) <<<
 
-Latest commit on main: **1cfa1a9** (all pushed, 48 offline tests pass, tree clean).
+(Historical note; current state is the ESCALATE/cascade blocks at the top. As of the cascade work:
+**52 offline tests pass**, all pushed. Do not trust the specific old commit hashes below.)
 
 0. **calib2 is DONE and analyzed** (RESULT block above: DECOMPOSE fixed, frontier flat). No
    sweep is running (a premature calib3 was launched then killed -- decision: do the FIXES
@@ -236,7 +253,7 @@ Latest commit on main: **1cfa1a9** (all pushed, 48 offline tests pass, tree clea
    gap -- utility==solve until STOP is explored), then the ESCALATE capstone (task #54), then
    tau-bench. Escalation stays OFF until the above shows whether the fixes moved the frontier.
 
-## Current status (latest commit 1cfa1a9)
+## Historical status snapshot (STALE -- pre-ESCALATE; see the cascade blocks at the TOP for current)
 
 - **All 8 bugs fixed and committed; 47 offline tests pass.** Latest commits: cae1958 (DECOMPOSE
   synthesis + 4), 9c67b3b (utility/solvable metrics + eval-trace logging), 20220a8 (decomposability

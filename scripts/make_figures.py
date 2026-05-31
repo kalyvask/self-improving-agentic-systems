@@ -250,7 +250,9 @@ def fig_cascade():
     cost -- the win is 'near-strong solve, far-below-strong cost, selectively'."""
     try:
         pts = {
-            "claude-3-haiku only":     _arm("casc3_A_c3h_eval.jsonl", "dpo@r2"),
+            # cheap-only at its BEST achievable point (bandit@r0, 0.96) -- not the weaker
+            # dpo@r2 (0.88) -- so the baseline is not cherry-picked low.
+            "claude-3-haiku only":     _arm("casc3_A_c3h_eval.jsonl", "bandit@r0"),
             "learned cascade":         _arm("casc5_B_cw15_eval.jsonl", "dpo@r2"),
             "Haiku-4.5 only (ceiling)": _arm("casc2_C_haikuonly_eval.jsonl", "dpo@r2"),
         }

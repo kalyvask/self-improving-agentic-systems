@@ -202,6 +202,59 @@ def analyze_stops(paths: list[str], policy: str | None = None) -> None:
             print("  (no STOP traces)")
 
 
+def analyze_ab2(path_a: str, path_b: str, tag_a: str | None = None,
+                tag_b: str | None = None) -> None:
+    """Paired A/B across TWO separate eval files (e.g. a cascade run vs a strong-only
+    run), pairing on shared task_id. analyze_ab() only handles two policy tags inside
+    ONE file; cross-file comparisons (the cascade-vs-strong result) need this. Reports
+    solve (Wilson + McNemar), the paired per-task cost CI, and the MEAN and P95 (tail)
+    cost of each arm -- the tail matters because a cascade can win on mean and lose on
+    p95. Pass --ab2-tags to pick a policy tag from each file (default: highest @rN)."""
+    import numpy as np
+
+    def _load(path, tag):
+        per = defaultdict(dict)
+        for t in TraceLog(path).read():
+            per[t.policy][t.task_id] = t
+        names = list(per)
+        if tag is None:
+            tag = max(names, key=lambda p: int(p.split("@r")[1]) if "@r" in p else -1)
+        if tag not in per:
+            raise SystemExit(f"[ab2] tag {tag} not in {path} (have {names})")
+        return tag, per[tag]
+
+    ta, A = _load(path_a, tag_a)
+    tb, B = _load(path_b, tag_b)
+    shared = sorted(set(A) & set(B))
+    n = len(shared)
+    if not n:
+        print("[ab2] no shared task_ids."); return
+
+    def solved(t):
+        return bool(t.solved or t.terminal_reward >= 0.99)
+
+    def cost(t):
+        return (t.total_cost or {}).get(t.currency, 0.0)
+
+    ka = sum(solved(A[t]) for t in shared)
+    kb = sum(solved(B[t]) for t in shared)
+    print(f"=== paired A/B (cross-file): {ta} [{path_a}] vs {tb} [{path_b}] | {n} shared ===\n")
+    print(f" solve {ta}: {wilson_ci(ka, n)}")
+    print(f" solve {tb}: {wilson_ci(kb, n)}")
+    mc = mcnemar([(solved(A[t]), solved(B[t])) for t in shared])
+    print(f" McNemar (paired solve): p={mc['p_value']:.3f}  "
+          f"({'tied' if mc['p_value'] > 0.05 else 'significant'})")
+    ca = [cost(A[t]) for t in shared]
+    cb = [cost(B[t]) for t in shared]
+    ci = paired_diff_ci([cb[i] - ca[i] for i in range(n)])
+    sig = ("  <-- B resolved CHEAPER" if ci.hi < 0 else
+           "  <-- B resolved MORE EXPENSIVE" if ci.lo > 0 else "  (straddles 0)")
+    print(f"\n mean cost {ta}={np.mean(ca):.5f} (p95 {np.percentile(ca,95):.5f}) | "
+          f"{tb}={np.mean(cb):.5f} (p95 {np.percentile(cb,95):.5f})")
+    print(f" paired mean-cost delta ({tb}-{ta}): {ci}{sig}")
+    print(f" NOTE: tail (p95) can move the opposite way to the mean; report both.")
+
+
 def analyze_oracle(paths: list[str], policy: str | None = None) -> None:
     """Oracle-rescue: WHY does the chosen policy miss the tasks it misses? For each
     SOLVABLE task the target policy failed, classify the miss so the right next lever
@@ -275,6 +328,10 @@ def main() -> None:
                     help="trace files: classify a policy's solvable misses (premature/recoverable/capability)")
     ap.add_argument("--oracle-policy", default=None,
                     help="target policy tag for --oracle (default: highest @rN)")
+    ap.add_argument("--ab2", nargs=2, metavar=("FILE_A", "FILE_B"), default=None,
+                    help="paired A/B across two separate eval files (e.g. cascade vs strong-only)")
+    ap.add_argument("--ab2-tags", nargs=2, metavar=("TAG_A", "TAG_B"), default=None,
+                    help="policy tag to pick from each --ab2 file (default: highest @rN each)")
     args = ap.parse_args()
     if args.ab:
         analyze_ab(args.ab)
@@ -286,8 +343,11 @@ def main() -> None:
         analyze_stops(args.stops, args.stops_policy)
     if args.oracle:
         analyze_oracle(args.oracle, args.oracle_policy)
-    if not (args.ab or args.irt or args.verifier or args.stops or args.oracle):
-        ap.error("pass --ab, --irt, --verifier, --stops, and/or --oracle")
+    if args.ab2:
+        ta, tb = (args.ab2_tags or (None, None))
+        analyze_ab2(args.ab2[0], args.ab2[1], ta, tb)
+    if not (args.ab or args.irt or args.verifier or args.stops or args.oracle or args.ab2):
+        ap.error("pass --ab, --ab2, --irt, --verifier, --stops, and/or --oracle")
 
 
 if __name__ == "__main__":
