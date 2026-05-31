@@ -152,10 +152,16 @@ def run_task(
                      if a not in (Action.DECOMPOSE, Action.STOP)}
             if avail:
                 decision = Decision(action=max(avail, key=avail.get), scores=decision.scores)
-        # Mask ESCALATE when no stronger model is wired in (analogous to the DECOMPOSE
-        # mask): otherwise it would be a logged no-op. Re-pick the best cheap spend so
-        # a masked ESCALATE does not silently become a STOP (fake abstention).
-        if decision.action == Action.ESCALATE and strong_executor is None:
+        # Mask ESCALATE when (a) no stronger model is wired in, or (b) the cheap model
+        # has not attempted yet (n_children == 0). (b) is the cascade SEMANTICS:
+        # ESCALATE is a RESCUE after the cheap model fails, not a step-0 shortcut.
+        # Without it the bandit discovers escalate-at-step-0 is a sure solve (one strong
+        # call always works), the successful-trace set fills with escalate-first, and
+        # BC/DPO clone "always escalate" -- collapsing the cascade to strong-only with no
+        # cost saving. Forcing one cheap attempt first makes the policy learn to escalate
+        # only the tasks the cheap model actually missed (selective). Re-pick the best
+        # cheap spend so a masked ESCALATE never silently becomes a STOP (fake abstention).
+        if decision.action == Action.ESCALATE and (strong_executor is None or len(trajectories) == 0):
             avail = {a: v for a, v in decision.scores.items()
                      if a not in (Action.ESCALATE, Action.STOP, Action.DECOMPOSE)}
             if avail:

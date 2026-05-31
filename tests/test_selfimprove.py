@@ -357,40 +357,47 @@ def test_escalate_masked_when_no_strong_executor():
     assert acts == ["wider"]            # re-picked to the best available cheap spend
 
 
-def test_escalate_runs_strong_executor_and_bills_its_cost():
-    # When a strong executor IS wired in, ESCALATE runs it on the task, the cheap
-    # executor is NOT used, and the strong call's (higher) cost lands in the ledger.
+def test_escalate_is_a_rescue_after_a_failed_cheap_attempt():
+    # Cascade semantics: ESCALATE is masked at step 0 (n_children==0) even with a strong
+    # executor wired in -- the cheap model must attempt first. So the controller tries
+    # cheap (step 0), and only after that miss does ESCALATE run the strong model (step
+    # 1), solving the task and billing the strong call's higher cost. This is the gate
+    # that stops the policy from collapsing to always-escalate-at-step-0.
     from wdp.loop.runner import run_task
     from wdp.allocator.policy import Action, Decision
     from wdp.cost import Spend
     from wdp.benchmarks.arithmetic import ArithmeticVerifier
 
-    class EscalateOnce:
+    class AlwaysEscalate:            # wants ESCALATE every step; WIDER is the fallback
         def decide(self, feats, currency, *, explore=False):
             return Decision(action=Action.ESCALATE,
-                            scores={Action.ESCALATE: 0.9, Action.WIDER: 0.1})
+                            scores={Action.ESCALATE: 0.9, Action.WIDER: 0.5, Action.DEEPER: 0.1})
 
-    class StrongExecutor:           # solves the task and bills a pricey call
+    class CheapFails:                # cheap model attempts and gets it WRONG (gold=42)
+        def run(self, task, *, ledger=None, parallel_group=None):
+            ledger.add(Spend(model="cheap", prompt_tokens=10, completion_tokens=5,
+                             wall_seconds=0.1, dollars=0.0002, parallel_group=parallel_group))
+            return Trajectory(task_id=task.id, final_answer="0", parallel_group=parallel_group)
+
+    class StrongSolves:              # strong model rescues it and bills a pricey call
         def run(self, task, *, ledger=None, parallel_group=None):
             ledger.add(Spend(model="strong", prompt_tokens=100, completion_tokens=50,
                              wall_seconds=1.0, dollars=0.01, parallel_group=parallel_group))
             return Trajectory(task_id=task.id, final_answer="42", parallel_group=parallel_group)
 
-    class BoomExecutor:             # the cheap executor must NOT be called on ESCALATE
-        def run(self, task, *, ledger=None, parallel_group=None):
-            raise AssertionError("cheap executor should not run on ESCALATE")
-
-    class DummyVerifier:            # never called: a completed trajectory uses terminal grade
+    class DummyVerifier:
         def score_step(self, task, partial, *, ledger=None):
             return Score(value=0.0)
 
     task = Task(id="t", prompt="q", metadata={"gold": 42.0})
-    trace = run_task(task, EscalateOnce(), BoomExecutor(), verifier=DummyVerifier(),
-                     terminal=ArithmeticVerifier(), cfg=RunConfig(max_decisions=1, currency="dollars"),
-                     strong_executor=StrongExecutor())
-    assert [d.action for d in trace.decisions] == ["escalate"]
-    assert trace.solved
-    assert (trace.total_cost or {}).get("dollars", 0.0) >= 0.01   # strong call billed
+    trace = run_task(task, AlwaysEscalate(), CheapFails(), verifier=DummyVerifier(),
+                     terminal=ArithmeticVerifier(),
+                     cfg=RunConfig(max_decisions=2, currency="dollars"),
+                     strong_executor=StrongSolves())
+    acts = [d.action for d in trace.decisions]
+    assert acts == ["wider", "escalate"]          # step 0 masked to cheap; step 1 rescues
+    assert trace.solved                            # strong solved after the cheap miss
+    assert (trace.total_cost or {}).get("dollars", 0.0) >= 0.0102   # cheap + strong billed
 
 
 def test_deeper_targets_unfinished_and_does_not_revise_a_completed_answer():
