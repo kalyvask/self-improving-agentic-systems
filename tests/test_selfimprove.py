@@ -400,6 +400,56 @@ def test_escalate_is_a_rescue_after_a_failed_cheap_attempt():
     assert (trace.total_cost or {}).get("dollars", 0.0) >= 0.0102   # cheap + strong billed
 
 
+def test_escalate_hands_off_a_live_env_via_continue_from():
+    # True handoff: when the cheap model leaves an UNFINISHED trajectory with a live env
+    # (e.g. tau-bench ran out of steps mid-conversation), ESCALATE resumes THAT env with
+    # the strong model (continue_from), not a fresh attempt. Arithmetic has no env so it
+    # always takes the fresh path -- this exercises the env-bearing handoff branch.
+    from wdp.loop.runner import run_task
+    from wdp.allocator.policy import Action, Decision
+    from wdp.cost import Spend
+    from wdp.benchmarks.arithmetic import ArithmeticVerifier
+
+    class AlwaysEscalate:
+        def decide(self, feats, currency, *, explore=False):
+            return Decision(action=Action.ESCALATE,
+                            scores={Action.ESCALATE: 0.9, Action.WIDER: 0.5})
+
+    class CheapUnfinished:           # leaves an unfinished trajectory holding a live env
+        def run(self, task, *, ledger=None, parallel_group=None):
+            ledger.add(Spend(model="cheap", prompt_tokens=10, completion_tokens=5,
+                             wall_seconds=0.1, dollars=0.0002, parallel_group=parallel_group))
+            return Trajectory(task_id=task.id, final_answer=None, env=object(),
+                              parallel_group=parallel_group)
+
+    class StrongHandoff:
+        def __init__(self):
+            self.ran = self.continued = False
+        def run(self, task, *, ledger=None, parallel_group=None):
+            self.ran = True
+            return Trajectory(task_id=task.id, final_answer="42", parallel_group=parallel_group)
+        def continue_from(self, task, traj, *, ledger=None, parallel_group=None, extra_steps=None):
+            self.continued = True
+            ledger.add(Spend(model="strong", prompt_tokens=100, completion_tokens=50,
+                             wall_seconds=1.0, dollars=0.01, parallel_group=parallel_group))
+            return Trajectory(task_id=task.id, final_answer="42", env=traj.env,
+                              parallel_group=parallel_group)
+
+    class DummyVerifier:
+        def score_step(self, task, partial, *, ledger=None):
+            return Score(value=0.3)
+
+    strong = StrongHandoff()
+    trace = run_task(Task(id="t", prompt="q", metadata={"gold": 42.0}),
+                     AlwaysEscalate(), CheapUnfinished(), verifier=DummyVerifier(),
+                     terminal=ArithmeticVerifier(),
+                     cfg=RunConfig(max_decisions=2, currency="dollars"),
+                     strong_executor=strong)
+    assert [d.action for d in trace.decisions] == ["wider", "escalate"]
+    assert strong.continued and not strong.ran    # resumed the env, did NOT start fresh
+    assert trace.solved
+
+
 def test_deeper_targets_unfinished_and_does_not_revise_a_completed_answer():
     # DEEPER semantics contract. The runner only continues a trajectory that has
     # genuine unfinished work (or a self-reported stall); on an all-completed set

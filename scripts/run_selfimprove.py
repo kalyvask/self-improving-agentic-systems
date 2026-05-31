@@ -211,11 +211,11 @@ def main() -> None:
                     user_model=args.user_model, user_provider=args.user_provider,
                     max_steps=cfg["executor"]["max_steps"],
                     temperature=cfg["executor"]["temperature"])
-                print("NOTE: on tau-bench, ESCALATE opens a FRESH env attempt with the strong "
-                      "model (a strong retry), NOT a mid-conversation handoff of the cheap env. "
-                      "Frame the result as 'retry with a stronger model'. User-simulator cost "
-                      "runs through tau/litellm and is NOT in the ledger, so reported cost is "
-                      "AGENT cost only.")
+                print("NOTE: on tau-bench, ESCALATE is a TRUE HANDOFF when the cheap attempt is "
+                      "unfinished (the strong model resumes the same live env/conversation); it "
+                      "falls back to a fresh strong attempt only when there is no live env to "
+                      "resume. User-simulator cost runs through tau/litellm and is NOT in the "
+                      "ledger, so reported cost is AGENT cost only.")
             else:
                 strong_executor = Executor(client, args.escalate_model, tools=bench.tools(),
                                            max_steps=cfg["executor"]["max_steps"],

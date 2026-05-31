@@ -216,13 +216,20 @@ def run_task(
                 trajectories.append(new_traj)
 
         elif decision.action == Action.ESCALATE and strong_executor is not None:
-            # Hand the task to the stronger model: a fresh attempt on the same task,
-            # billed into the SAME ledger at the strong model's (higher) price. Credit
-            # then flows through the normal value_per_cost rule -- a strong solve that
-            # the cheap model could not reach is reinforced, but its higher cost makes
-            # it strictly worse than a cheap solve, so the policy learns to escalate
-            # only when cheap attempts are failing.
-            new_traj = strong_executor.run(task, ledger=ledger, parallel_group=pg)
+            # Hand the step to the stronger model, billed into the SAME ledger at its
+            # (higher) price. TRUE HANDOFF when the cheap model left an unfinished
+            # trajectory with a LIVE env (e.g. tau-bench ran out of steps mid-task): the
+            # strong model resumes that same env/conversation rather than starting over.
+            # Otherwise (no live env to resume -- always the case on stateless arithmetic,
+            # where completed-wrong attempts have no env) it is a fresh strong attempt.
+            # Gating on a live env keeps arithmetic behavior identical (always fresh).
+            target = _deepest_unfinished(trajectories)
+            if target is not None and getattr(target, "env", None) is not None:
+                new_traj = strong_executor.continue_from(
+                    task, target, ledger=ledger, parallel_group=pg,
+                    extra_steps=cfg.deeper_extra_steps)
+            else:
+                new_traj = strong_executor.run(task, ledger=ledger, parallel_group=pg)
             trajectories.append(new_traj)
 
         # Score whatever we just produced. For a COMPLETED trajectory the terminal
