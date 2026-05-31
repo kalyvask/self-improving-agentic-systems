@@ -95,6 +95,39 @@ any Opus judge in front of it) has nothing to demonstrate. The cost thesis is DO
 ~20-40%** (Step 0 in `docs/ESCALATE_DESIGN.md`), gated by re-running `--oracle` until
 capability_ceiling lands in that band.
 
+**ESCALATE PROGRESS (weak->strong cascade test bed -- GATE PASSED, building the action):**
+After two failed attempts to make a ceiling via task difficulty (hard-calc and no-calc both
+solved ~1.0 by Haiku-4.5), pivoted to the MODEL axis: weak cheap model -> Haiku-4.5 ESCALATE
+target. Added `--cheap-model` override (no config edits) and graded the no-calc tier
+(easy/medium/hard chain lengths). Probe ladder on identical no-calc tasks: Haiku-4.5 1.00,
+claude-3-haiku 0.94, **llama-3.1-8b 0.56 (8-decision) / 0.17 (single-attempt)**. Reference runs
+(`casc_llama`, `casc_haiku`, 60 graded tasks, single attempt): llama 0.17 vs Haiku **1.00**,
+50/60 rescuable. **Integrity-checked**: direct llama outputs confirm genuine misses (echoes the
+start number / stops mid-chain), NOT a grading artifact. Gradient is flat (llama weak across all
+bands), so the escalation signal is POST-ATTEMPT FAILURE (cheap tries -> low score -> escalate),
+learnable from the process-score feature, not task length. Phases 1+2 DONE (Haiku rescues 100%, so
+the casc_haiku run IS the label set). NOW: Phase 3 -- build ESCALATE as the 5th action (runner
+branch executes the step on the strong model + bills real cost; policy + credit via existing
+value_per_cost). Then Phase 4 alt-test, Phase 5 live calib5 (llama-only DPO vs DPO+ESCALATE vs
+Haiku-only). Target = Haiku-4.5 first (cheaper than Opus); Opus only if Haiku is not enough.
+Cascade story: "small cheap model handles the easy share; learned controller escalates what it
+can't solve to a frontier model -> near-Haiku solve at a fraction of Haiku-only cost." calib4
+Haiku-only cost result stays SEPARATE (two experiments).
+
+**PHASE 5 RESULT v1 (uncalibrated budget -- cascade NOT selective; diagnosed + re-running):**
+ESCALATE built (Phase 3, 52 tests). 3-arm eval (60 graded no-calc tasks, budget 0.02, dpo@r2):
+A llama-only solve 0.62 @ $0.00103; **B cascade solve 1.00 @ $0.00124 but escalate_rate 1.00**;
+C haiku-only solve 1.00 @ $0.00125. So B == C: the cascade lifts solve (0.62->1.00) but saves
+NOTHING because it escalates every task. Root cause = budget too flat (0.02 >> ~0.001 task cost)
+-> escalate barely penalized -> "always escalate" ties "selective". Compounded by llama burning
+~5 retries (~$0.001, ~= one Haiku call) so a SINGLE llama attempt (~$0.0002, ~6x cheaper) is the
+real edge. Cost-optimal = "try llama ONCE, escalate on failure" (~half the always-escalate cost),
+which is feature-learnable (escalate when n_children>=1 & score_max~0). FIX = budget calibration:
+re-running all 3 arms at **budget 0.0008** (~1.5x a Haiku call) so escalation genuinely costs while
+solve_floor keeps a necessary escalate-solve worth it. Files: casc2_{A,B,C}_*. If B now escalates
+SELECTIVELY (rate < 1, cost between A and C, solve ~1) that is the cascade win; if still
+always-escalate, lower budget further / raise --cost-weight, else report honestly.
+
 **PHASE 0 RESULT (hard-arith-v1 -- NO CEILING, blocked, awaiting direction):** Added a `hard`
 tier (`--hard N`): multi-hop word problems, tangled prose, distractor numbers, a final conditional,
 non-decomposable. Live Haiku probe (30 tasks, 2 rounds, `traces/hard_probe*`): eval solve **1.00**
