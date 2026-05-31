@@ -400,6 +400,24 @@ def test_escalate_is_a_rescue_after_a_failed_cheap_attempt():
     assert (trace.total_cost or {}).get("dollars", 0.0) >= 0.0102   # cheap + strong billed
 
 
+def test_deeper_with_no_unfinished_target_is_relabeled_wider():
+    # DEEPER at step 0 (or whenever nothing is unfinished) executes as a fresh attempt,
+    # so the trace must record WIDER -- not DEEPER -- otherwise the policy is trained to
+    # think "DEEPER first" works when a fresh attempt actually ran.
+    from wdp.loop.runner import run_task
+    from wdp.allocator.policy import Action, Decision
+
+    class DeeperPreferring:
+        def decide(self, feats, currency, *, explore=False):
+            return Decision(action=Action.DEEPER,
+                            scores={Action.DEEPER: 0.7, Action.WIDER: 0.3})
+
+    ex, pl, vf, tm = _stack()
+    trace = run_task(Task(id="t", prompt="q"), DeeperPreferring(), ex, vf, tm,
+                     planner=None, cfg=RunConfig(max_decisions=1))
+    assert [d.action for d in trace.decisions] == ["wider"]
+
+
 def test_escalate_hands_off_a_live_env_via_continue_from():
     # True handoff: when the cheap model leaves an UNFINISHED trajectory with a live env
     # (e.g. tau-bench ran out of steps mid-conversation), ESCALATE resumes THAT env with
@@ -432,8 +450,8 @@ def test_escalate_hands_off_a_live_env_via_continue_from():
             self.continued = True
             ledger.add(Spend(model="strong", prompt_tokens=100, completion_tokens=50,
                              wall_seconds=1.0, dollars=0.01, parallel_group=parallel_group))
-            return Trajectory(task_id=task.id, final_answer="42", env=traj.env,
-                              parallel_group=parallel_group)
+            traj.final_answer = "42"          # MUTATE in place + return same (real semantics)
+            return traj
 
     class DummyVerifier:
         def score_step(self, task, partial, *, ledger=None):

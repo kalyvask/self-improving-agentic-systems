@@ -207,6 +207,11 @@ def run_task(
                     task, target, ledger=ledger, parallel_group=pg,
                     extra_steps=cfg.deeper_extra_steps)
             else:
+                # No unfinished trajectory to deepen -> this executes as a FRESH attempt
+                # (WIDER-equivalent). RE-LABEL the decision to WIDER so the trace and
+                # credit match what actually ran; logging it as "deeper" would teach the
+                # policy that DEEPER-at-step-0 works when it was really a fresh attempt.
+                decision = Decision(action=Action.WIDER, scores=decision.scores)
                 new_traj = executor.run(task, ledger=ledger, parallel_group=pg)
                 trajectories.append(new_traj)
 
@@ -225,12 +230,15 @@ def run_task(
             # Gating on a live env keeps arithmetic behavior identical (always fresh).
             target = _deepest_unfinished(trajectories)
             if target is not None and getattr(target, "env", None) is not None:
+                # continue_from MUTATES `target` in place and returns it, so it is
+                # ALREADY in `trajectories` -- do NOT append (that double-counts the
+                # same attempt: inflated n_children / attempts_done_frac). Mirrors DEEPER.
                 new_traj = strong_executor.continue_from(
                     task, target, ledger=ledger, parallel_group=pg,
                     extra_steps=cfg.deeper_extra_steps)
             else:
                 new_traj = strong_executor.run(task, ledger=ledger, parallel_group=pg)
-            trajectories.append(new_traj)
+                trajectories.append(new_traj)
 
         # Score whatever we just produced. For a COMPLETED trajectory the terminal
         # grade is exact (and free on arithmetic; env-carried on tau-bench), so use
