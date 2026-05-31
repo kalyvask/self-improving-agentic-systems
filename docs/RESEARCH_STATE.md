@@ -86,6 +86,10 @@ Latest commit on main: **1cfa1a9** (all pushed, 48 offline tests pass, tree clea
      * TODO **STOP-gating ablation** (offline-ish): estimate the upper bound -- replacing DPO's ~4
        premature atomic STOPs with successful sequences ~= solve 0.86 / utility 1.0 at ~same cost.
        Run this BEFORE escalate; it shows STOP selectivity, not capability, is the immediate gain.
+       In the k={2,3,4} sweep, track CORRECT_STOP vs PREMATURE_STOP separately (not just best k or
+       a single utility number): the goal is to cut premature stops while preserving correct
+       underspecified abstention. Prefer STOP firing ONLY via the explicit evidence predicate over
+       free learned/masked STOP.
      * Use **DPO** as the base policy (KTO dropped DECOMPOSE + over-stops); fix make_figures curve
        parser (reads `util` as cost on new logs) + repoint non-headline figs to calib3; update
        run_calibrated_arith_sweep.sh to calib3 + `--stop-after-failed-attempts 2`.
