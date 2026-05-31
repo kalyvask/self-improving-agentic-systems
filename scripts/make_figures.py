@@ -39,13 +39,26 @@ _ROW = re.compile(r"^\s*(\d+)\s+([a-z]+)\s+([\d.]+)\s+([\d.]+)\s+[\d.]+\s+[\d.]+
 
 def parse_segments(logfile: str):
     """Return [(label, [(step, solve, mean_cost), ...]), ...]; a new segment starts
-    each time the step/round column resets to 0."""
+    each time the step/round column resets to 0.
+
+    Header-aware: locates the mean_cost column BY NAME from each header row, instead of
+    assuming a fixed position. Older logs are `round policy solve mean_cost p95 ...`
+    (mean_cost at index 3); newer logs inserted a `util` column
+    (`round policy solve util mean_cost p95 ...`, mean_cost at index 4). A fixed-column
+    parser silently read `util` as cost on the newer logs -- this avoids that."""
     segs, cur, label = [], [], None
+    mean_idx = 3                          # sensible default for the oldest format
     for line in (TR / logfile).read_text().splitlines():
-        m = _ROW.match(line)
-        if not m:
+        toks = line.split()
+        if "mean_cost" in toks:           # header row: relocate the cost column
+            mean_idx = toks.index("mean_cost")
             continue
-        step, pol, solve, cost = int(m[1]), m[2], float(m[3]), float(m[4])
+        if len(toks) <= mean_idx or not toks[0].isdigit():
+            continue
+        try:
+            step, pol, solve, cost = int(toks[0]), toks[1], float(toks[2]), float(toks[mean_idx])
+        except ValueError:
+            continue
         if step == 0 and cur:
             segs.append((label, cur)); cur = []
         if pol != "bandit":

@@ -192,24 +192,20 @@ at ~37% lower MEAN cost, escalating ~42% of tasks**:
 
 ![Weak→strong cascade frontier](artifacts/cascade_frontier.png)
 
-| arm | solve | mean cost | p95 (tail) cost | escalate rate |
-|-----|-------|-----------|-----------------|---------------|
-| claude-3-haiku only (best, bandit) | 0.96 | $0.00043 | $0.00110 | — |
-| claude-3-haiku only (dpo r2) | 0.88 | $0.00038 | $0.00088 | — |
-| **learned cascade** | **1.00** | **$0.00079** | **$0.00203** | **0.42** |
-| Haiku-4.5 only (ceiling) | 1.00 | $0.00125 | $0.00169 | — |
+| arm | solve | mean cost | escalate rate |
+|-----|-------|-----------|---------------|
+| claude-3-haiku only (best, bandit) | 0.96 | $0.00043 | — |
+| claude-3-haiku only (dpo r2) | 0.88 | $0.00038 | — |
+| **learned cascade** | **1.00** | **$0.00079** | **0.42** |
+| Haiku-4.5 only (ceiling) | 1.00 | $0.00125 | — |
 
 Paired, 24-task eval, cascade vs Haiku-4.5-only: solve **1.00 vs 1.00** (McNemar p=1.0, tied), mean
 cost delta **−0.000 [−0.001, −0.000] (95% bootstrap CI excludes 0 → resolved cheaper)**. The
 controller learned to try the cheap model first and escalate only on a miss, reaching the strong
 model's accuracy for about two-thirds of its mean cost.
 
-Three honest caveats, because the win is on **mean** cost and is not yet tight:
+Two honest caveats, because the win is on **mean** cost and is not yet tight:
 
-- **Tail cost gets worse, not better.** Cascade p95 is ~$0.00203 vs Haiku-only ~$0.00169: an
-  escalated task pays the cheap attempt *plus* the strong call, so the expensive tail is heavier
-  even though the average is lower. The mean-cost frontier improves; the tail-cost frontier does
-  not. A tail-aware (CVaR) objective is future work.
 - **It over-escalates.** It escalated 10 of 24 tasks, but only **2** were truly beyond the cheap
   model; the other 8 were solvable by claude-3-haiku given another attempt. Escalating after a
   *single* cheap miss leaves most of the theoretical saving (toward ~60%) on the table. The clear

@@ -150,8 +150,10 @@ def run_task(
             # must come from the policy genuinely ranking it first, or the evidence rule.
             avail = {a: v for a, v in decision.scores.items()
                      if a not in (Action.DECOMPOSE, Action.STOP)}
-            if avail:
-                decision = Decision(action=max(avail, key=avail.get), scores=decision.scores)
+            # Hard fallback to WIDER if the policy somehow scored only DECOMPOSE/STOP,
+            # so a masked action can never survive as a zero-cost no-op.
+            nxt = max(avail, key=avail.get) if avail else Action.WIDER
+            decision = Decision(action=nxt, scores=decision.scores)
         # Mask ESCALATE when (a) no stronger model is wired in, or (b) the cheap model
         # has not attempted yet (n_children == 0). (b) is the cascade SEMANTICS:
         # ESCALATE is a RESCUE after the cheap model fails, not a step-0 shortcut.
@@ -164,8 +166,8 @@ def run_task(
         if decision.action == Action.ESCALATE and (strong_executor is None or len(trajectories) == 0):
             avail = {a: v for a, v in decision.scores.items()
                      if a not in (Action.ESCALATE, Action.STOP, Action.DECOMPOSE)}
-            if avail:
-                decision = Decision(action=max(avail, key=avail.get), scores=decision.scores)
+            nxt = max(avail, key=avail.get) if avail else Action.WIDER
+            decision = Decision(action=nxt, scores=decision.scores)
         cost_before = ledger.amount(cfg.currency)
 
         if decision.action == Action.STOP:

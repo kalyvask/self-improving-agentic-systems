@@ -34,6 +34,12 @@ def _build_arithmetic(args, cfg, client):
     # so capability-gap probes (weak cheap model -> strong ESCALATE target) can't
     # silently contaminate the committed config/default.yaml. Falls back to cheap.
     exec_model = args.cheap_model or models["cheap"]
+    # --no-calc withholds the calculator tool for the WHOLE suite, but the atomic/multi
+    # prompts say "Use the calc tool" -- mixing them produces incoherent tasks. Guard:
+    # no-calc runs must be hard-tier-only.
+    if args.no_calc and (args.atomic or args.multi):
+        raise SystemExit("--no-calc requires --atomic 0 --multi 0 (the atomic/multi prompts "
+                         "reference the calc tool; only the --hard tier is calculator-free).")
     bench = ArithmeticBenchmark(n_atomic=args.atomic, n_multi=args.multi,
                                 n_underspecified=args.underspecified,
                                 n_hard=args.hard, no_calc=args.no_calc, seed=args.seed)

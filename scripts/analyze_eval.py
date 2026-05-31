@@ -159,7 +159,17 @@ def analyze_irt(paths: list[str]) -> None:
 def analyze_verifier(paths: list[str]) -> None:
     """Alt-test verdict on whether the cheap ProcessVerifier is good enough to act
     on: does its best process score predict terminal success better than always
-    guessing the majority outcome? Ground truth = the env-graded solved flag."""
+    guessing the majority outcome? Ground truth = the env-graded solved flag.
+
+    WARNING: only valid on traces where process_score_after came from the cheap LLM
+    verifier (partial trajectories). The runner now stores the exact TERMINAL reward in
+    process_score_after for COMPLETED trajectories, so on a trace set that is mostly
+    completed answers this alt-test trivially "passes" (process score == terminal == the
+    label it is predicting). Run it on dedicated verifier traces / partial-trajectory
+    runs, not on the standard arithmetic/cascade eval files, or the result is circular."""
+    print("[verifier] NOTE: valid only on cheap-verifier (partial-trajectory) scores; "
+          "completed trajectories store the terminal grade in process_score_after, which "
+          "makes this circular. Interpret accordingly.")
     scores, truth = [], []
     for p in paths:
         for t in TraceLog(p).read():
