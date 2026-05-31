@@ -224,8 +224,32 @@ Honest caveats:
   established by the alt-test — that is what a tau-bench transfer would have to demonstrate.
 
 (This is a separate experiment from the cost result above: a different cheap/strong model pair, not
-mixed into the single-model numbers. `budget` here is a credit-normalization knob, not a hard spend
-cap — the runner checks budget after each action, so a single task can spend past it.)
+mixed into the single-model numbers. `budget` here gates the loop *after* each action, so a single
+multi-turn action can overshoot it — it shapes credit and caps further spend, but is not a strict
+per-action cap.)
+
+#### Transfer check: the same cascade on tau-bench (a real agent benchmark)
+
+To see whether the cost win generalizes off the controlled arithmetic suite, the same
+claude-3-haiku → Haiku-4.5 cascade was run on **tau-bench retail** (multi-turn, env-graded
+customer-service tasks). It does **not** save cost there, and the reason is the boundary condition
+the arithmetic experiment already identified:
+
+| arm (tau retail, 8-task eval) | solve | mean agent cost | escalate rate |
+|---|---|---|---|
+| learned cascade | 1.00 | $0.136 | 0.88 |
+| Haiku-4.5 only | 1.00 | $0.118 | — |
+
+Solve is tied (McNemar p=1.0); the paired mean-cost delta **straddles zero** (−0.018 [−0.055,
+0.022]) — if anything the cascade is slightly *more* expensive. claude-3-haiku is too weak on tau
+retail (it escalates 88% of tasks), so the cascade pays a cheap attempt *plus* the strong call on
+nearly everything and lands at ≈ strong-only cost. This is the **same lesson the 8B model taught on
+arithmetic**, now on a real benchmark: a weak→strong cascade only saves money when the cheap model
+is capable enough to carry a real share of the load on that distribution (claude-3-haiku is, on
+arithmetic; it is not, on tau retail). The mechanism itself transfers — ESCALATE runs end to end on
+tau, including a true mid-conversation handoff (the strong model resumes the cheap model's live env
+rather than restarting). Caveats: small eval (n=8, stochastic user simulator, so this is
+directional not powered); **agent cost only** (the user-simulator's LLM turns run off-ledger).
 
 ---
 
