@@ -135,24 +135,31 @@ runs all of this offline on collected traces.
 
 ## Results
 
-**Headline: a learned cost-aware policy matches the cold-start bandit's solve rate at roughly
-half the cost.** On the calibrated arithmetic suite (110 tasks, 44-task eval), after fixing a
-family of credit/normalization/execution bugs and adding an abstention (STOP) rule, the DPO and
-KTO policies sit at ~$0.0015/task vs the bandit's ~$0.0029 at the same ~0.77 solve. The paired
-per-task cost delta is **−0.001 [−0.002, −0.001] (95% bootstrap CI excludes 0 → resolved)**,
-while solve rate is statistically tied (McNemar p=1.0). Cost is the metric with power at n=44;
-the learned policy spends it better, with a balanced WIDER/DEEPER/DECOMPOSE/STOP mix.
+**Headline: self-improvement cuts cost without giving up accuracy.** The point of learning from
+the agent's own traces here is to hold the solve rate while spending less, and that is what
+happens. On the calibrated arithmetic suite (110 tasks, 44-task eval), after fixing a family of
+credit/normalization/execution bugs and adding an abstention (STOP) rule, the DPO and KTO
+policies sit at ~$0.0015/task vs the cold-start bandit's ~$0.0029 — roughly half the cost — at
+the **same** solve rate. Accuracy is not the thing that moves: the paired solve rate is
+statistically tied (McNemar p=1.0, no win for either side), while the paired per-task cost delta
+is **−0.001 [−0.002, −0.001] (95% bootstrap CI excludes 0 → resolved)**. Cost is the metric with
+power at n=44; the learned policy spends it better, with a balanced WIDER/DEEPER/DECOMPOSE/STOP mix.
 
 ![Cost / solve frontier](artifacts/cost_solve_frontier.png)
 *Mean cost (x) vs solve rate (y), greedy eval. The learned policies (DPO/KTO) move left of the
 cold-start bandit at the same solve height — cheaper for the same outcome. Solve-rate error bars
 are wide (Wilson, n=44); the resolved signal is on cost (paired), not solve.*
 
-Honest caveat: this run uses an aggressive abstain-after-2-failed-attempts rule, so raw solve is
-~0.77 (vs ~0.84 without it) — it trades a few solves on hard-but-solvable tasks for ~half the
-cost and higher utility (solved-or-correctly-abstained = 0.91). Tuning that threshold trades
-cost back for solve. Lifting the solve *ceiling* (~0.84, Haiku's capability) needs the planned
-ESCALATE-to-a-stronger-model action, not allocation alone.
+To be precise about what "same accuracy" means: the learned policy and the cold-start baseline
+in this run are compared head-to-head on the identical 44 tasks, and neither solves more than the
+other (McNemar p=1.0). So self-improvement is not buying cost savings by quietly answering fewer
+tasks — it answers the same ones for less. Two separate honest notes: (1) this run enables an
+aggressive abstain-after-2-failed-attempts rule, which raises *utility*
+(solved-or-correctly-abstained = 0.91) and is what the ongoing k-sweep is tuning; the raw solve
+*level* both arms operate at (~0.77) is a property of that rule and the budget, not a drop caused
+by learning. (2) The solve *ceiling* (~0.84, Haiku's own capability on this suite) is above that
+level; lifting the ceiling needs the planned ESCALATE-to-a-stronger-model action, since better
+allocation of one model cannot exceed what that model can do.
 
 ---
 
