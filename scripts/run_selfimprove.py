@@ -82,6 +82,9 @@ def main() -> None:
                          "spends extra forked-attempt credits, cached per task")
     ap.add_argument("--diff-rollouts", type=int, default=4,
                     help="number of forked attempts per task for rollout difficulty")
+    ap.add_argument("--stop-after-failed-attempts", type=int, default=0,
+                    help="abstain (STOP) on a non-decomposable task after N attempts with no "
+                         "progress; gives the STOP arm data and saves budget (0 = off)")
     ap.add_argument("--overwrite", action="store_true",
                     help="truncate pre-existing trace outputs instead of refusing (append "
                          "to existing files is a contamination footgun)")
@@ -115,7 +118,8 @@ def main() -> None:
     run_cfg = RunConfig(currency=args.currency, budget=args.budget,
                         max_decisions=args.max_decisions,
                         cost_weight=args.cost_weight,
-                        abstention_credit=args.abstention_credit)
+                        abstention_credit=args.abstention_credit,
+                        stop_after_failed_attempts=args.stop_after_failed_attempts)
     out = args.out or str(Path(cfg["paths"]["traces"]) / "traces.jsonl")
     # Append-only TraceLog is a contamination footgun: a re-run silently appends to
     # (or interleaves with) an existing file. Refuse pre-existing outputs unless

@@ -36,6 +36,8 @@ class RunConfig:
     cost_weight: float = 0.5             # credit cost-efficiency steepness (thesis knob)
     abstention_credit: float = 0.5       # scale on correct-STOP credit (< solve scale)
     solve_floor: float = 0.6             # min cost-efficiency for a solve (> abstention_credit)
+    stop_after_failed_attempts: int = 0  # >0: abstain (STOP) on a non-decomposable task after
+                                         # this many attempts with no progress (0 = disabled)
 
 
 def _features(
@@ -118,6 +120,22 @@ def run_task(
         feats = _features(trajectories, process_scores, ledger=ledger, cfg=cfg,
                            decomposability=decomposability,
                            difficulty_override=task_difficulty)
+        # Hopeless-task abstention rule (gives the STOP arm a path into the data and
+        # saves budget on unsolvable tasks): on a structurally non-decomposable task
+        # (decomposability==0) with no terminal progress and ~0 process scores after
+        # `stop_after_failed_attempts` attempts, abstain. Correct on underspecified
+        # tasks (earns abstention credit); a premature give-up on a hard-but-solvable
+        # task earns 0, so credit still distinguishes the two and the policy can learn.
+        if (cfg.stop_after_failed_attempts and feats.decomposability <= 0.0
+                and len(trajectories) >= cfg.stop_after_failed_attempts
+                and best_terminal <= 0.0 and feats.score_max <= 0.05):
+            trace.add(DecisionRecord(
+                step=step, features=feats.vector().tolist(), action=Action.STOP.value,
+                scores={}, currency=cfg.currency, cost_before=ledger.amount(cfg.currency),
+                cost_after=ledger.amount(cfg.currency), process_score_after=feats.score_max,
+            ))
+            break
+
         decision = allocator.decide(feats, cfg.currency, explore=explore)
         # Mask unavailable actions: DECOMPOSE cannot run without a planner (a logged
         # no-op), and is structurally pointless on a non-decomposable task

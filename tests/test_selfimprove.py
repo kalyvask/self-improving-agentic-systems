@@ -248,6 +248,38 @@ def test_bc_keeps_decompose_solves_not_just_cheap_atomic():
     assert failed not in kept                               # failure excluded
 
 
+def test_stop_after_failed_attempts_abstains_on_hopeless_task():
+    # The hopeless-task rule: on a non-decomposable task (planner=None -> decomp 0)
+    # with no progress after k attempts, abstain. Gives STOP a path into the data.
+    from wdp.loop.runner import run_task
+    from wdp.allocator.policy import Action, Decision
+
+    class WiderAlloc:
+        def decide(self, f, c, *, explore=False):
+            return Decision(action=Action.WIDER, scores={Action.WIDER: 1.0})
+
+    class FailExec:
+        def run(self, task, *, ledger=None, parallel_group=None):
+            return Trajectory(task_id=task.id, final_answer="nope", parallel_group=parallel_group)
+
+    class NeverSolve:
+        def score_final(self, task, ans):
+            return Score(value=0.0)
+
+    class V:
+        def score_step(self, task, partial, *, ledger=None):
+            return Score(value=0.0)
+
+    trace = run_task(Task(id="u", prompt="q"), WiderAlloc(), FailExec(), verifier=V(),
+                     terminal=NeverSolve(), planner=None,
+                     cfg=RunConfig(max_decisions=6, stop_after_failed_attempts=2))
+    assert trace.decisions[-1].action == "stop" and not trace.solved
+    # Disabled by default (back-compat): no forced STOP.
+    t2 = run_task(Task(id="u", prompt="q"), WiderAlloc(), FailExec(), verifier=V(),
+                  terminal=NeverSolve(), planner=None, cfg=RunConfig(max_decisions=3))
+    assert all(d.action != "stop" for d in t2.decisions)
+
+
 def test_decompose_synthesizes_parent_answer():
     # Bug #1: DECOMPOSE must SYNTHESIZE a parent answer, not concatenate sub-answers.
     # Before the fix parent.final_answer was "[s1] 6\n[s2] 20", graded on the last
