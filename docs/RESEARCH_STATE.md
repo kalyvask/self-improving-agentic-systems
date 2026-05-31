@@ -35,14 +35,25 @@ Solve is capped ~0.84 (Haiku ceiling), so cost is the only axis with headroom.
 
 Latest commit on main: **1cfa1a9** (all pushed, 48 offline tests pass, tree clean).
 
-1. **A live post-fix arithmetic sweep was running** (bg `bd0zrv819`): bc/dpo/kto, 110 tasks,
-   budget 0.003, escalation OFF, outputs `traces/calib2_{bc,dpo,kto}.jsonl` (+ `_eval.jsonl`).
-   bc+dpo finished; kto was ~round 2 when context filled. **First check if it completed**
-   (`wc -l traces/calib2_kto.jsonl` should be 264; one python worker ~200MB = still running).
-   If it died, rerun ONLY the missing arm: `python scripts/run_selfimprove.py --learner kto
-   --benchmark arithmetic --atomic 60 --multi 40 --underspecified 10 --budget 0.003
-   --max-decisions 8 --rounds 3 --seed 0 --out traces/calib2_kto.jsonl --overwrite`.
-   ALWAYS confirm a SINGLE sweep wrapper (we hit duplicate-wrapper contamination before).
+0. **calib2 is DONE and analyzed** (RESULT block above: DECOMPOSE fixed, frontier flat). No
+   sweep is running (a premature calib3 was launched then killed -- decision: do the FIXES
+   FIRST, then ONE consolidated rerun, rather than spend on an incremental mask-only calib3).
+
+   **Plan = implement the offline fixes, THEN a single rerun, THEN escalate** (user-confirmed
+   order; a 2nd model + ours agree on the fixes):
+   - **(a) Teach STOP** (offline): add STOP exploration during collection + a rule "decomp=0 &
+     no progress after k attempts & scores~0 -> STOP"; add a `zero_score_attempts` (or
+     all_attempts_failed) feature; keep abstention_credit < solve_floor (drift guard).
+   - **(b) Make DECOMPOSE selective** via **DPO lexicographic pair-mining** (offline): prefer
+     solved>failed, then cheaper WITHIN the same decomposability bucket + similar score/budget;
+     never pair a cheap failure over an expensive solve. (The decomp=0 hard-mask is already in.)
+   - **(c) THEN one consolidated rerun** (`calib3_*`, --overwrite, single wrapper): expect
+     same ~0.84 solve/utility at LOWER cost (mask + selective decompose) and STOP catching the
+     ~6 underspecified eval tasks (utility up). Headline metric = PAIRED COST; DPO is the most
+     promising learner.
+   - **(d) THEN ESCALATE capstone** (task #54): the only lever past the ~0.84 Haiku ceiling;
+     learn cheap-Haiku-first, Opus-only-when-stuck; then tau-bench on paired cost.
+   Validate each fix offline before the rerun (recompute/refit on existing traces where possible).
 2. **Then run the decisive analysis** (the whole point of this sweep -- DECOMPOSE can now solve
    multi-part tasks, the feature separates them, and BC keeps DECOMPOSE successes):
    - Does DECOMPOSE now SOLVE multi tasks (was 0 across all prior runs)? grep decompose+solved.
