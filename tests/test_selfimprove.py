@@ -336,6 +336,63 @@ def test_decompose_masked_when_no_planner():
     assert "decompose" not in [d.action for d in trace.decisions]
 
 
+def test_escalate_masked_when_no_strong_executor():
+    # Like the DECOMPOSE-without-planner mask: an ESCALATE preference with no strong
+    # executor wired in must be re-picked to the best CHEAP spend, never logged as a
+    # no-op and never silently turned into a STOP (fake abstention).
+    from wdp.loop.runner import run_task
+    from wdp.allocator.policy import Action, Decision
+
+    class EscalatePreferring:
+        def decide(self, feats, currency, *, explore=False):
+            return Decision(action=Action.ESCALATE,
+                            scores={Action.ESCALATE: 0.7, Action.WIDER: 0.2,
+                                    Action.STOP: 0.5, Action.DEEPER: 0.1})
+
+    ex, pl, vf, tm = _stack()
+    trace = run_task(Task(id="t", prompt="q"), EscalatePreferring(), ex, vf, tm,
+                     planner=None, cfg=RunConfig(max_decisions=1), strong_executor=None)
+    acts = [d.action for d in trace.decisions]
+    assert "escalate" not in acts and "stop" not in acts
+    assert acts == ["wider"]            # re-picked to the best available cheap spend
+
+
+def test_escalate_runs_strong_executor_and_bills_its_cost():
+    # When a strong executor IS wired in, ESCALATE runs it on the task, the cheap
+    # executor is NOT used, and the strong call's (higher) cost lands in the ledger.
+    from wdp.loop.runner import run_task
+    from wdp.allocator.policy import Action, Decision
+    from wdp.cost import Spend
+    from wdp.benchmarks.arithmetic import ArithmeticVerifier
+
+    class EscalateOnce:
+        def decide(self, feats, currency, *, explore=False):
+            return Decision(action=Action.ESCALATE,
+                            scores={Action.ESCALATE: 0.9, Action.WIDER: 0.1})
+
+    class StrongExecutor:           # solves the task and bills a pricey call
+        def run(self, task, *, ledger=None, parallel_group=None):
+            ledger.add(Spend(model="strong", prompt_tokens=100, completion_tokens=50,
+                             wall_seconds=1.0, dollars=0.01, parallel_group=parallel_group))
+            return Trajectory(task_id=task.id, final_answer="42", parallel_group=parallel_group)
+
+    class BoomExecutor:             # the cheap executor must NOT be called on ESCALATE
+        def run(self, task, *, ledger=None, parallel_group=None):
+            raise AssertionError("cheap executor should not run on ESCALATE")
+
+    class DummyVerifier:            # never called: a completed trajectory uses terminal grade
+        def score_step(self, task, partial, *, ledger=None):
+            return Score(value=0.0)
+
+    task = Task(id="t", prompt="q", metadata={"gold": 42.0})
+    trace = run_task(task, EscalateOnce(), BoomExecutor(), verifier=DummyVerifier(),
+                     terminal=ArithmeticVerifier(), cfg=RunConfig(max_decisions=1, currency="dollars"),
+                     strong_executor=StrongExecutor())
+    assert [d.action for d in trace.decisions] == ["escalate"]
+    assert trace.solved
+    assert (trace.total_cost or {}).get("dollars", 0.0) >= 0.01   # strong call billed
+
+
 def test_deeper_targets_unfinished_and_does_not_revise_a_completed_answer():
     # DEEPER semantics contract. The runner only continues a trajectory that has
     # genuine unfinished work (or a self-reported stall); on an all-completed set

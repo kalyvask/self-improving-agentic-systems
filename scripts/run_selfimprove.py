@@ -107,6 +107,10 @@ def main() -> None:
     ap.add_argument("--cheap-model", default=None,
                     help="override the arithmetic executor+planner model (OpenRouter slug) "
                          "without editing config; used for weak-cheap-model capability probes")
+    ap.add_argument("--escalate-model", default=None,
+                    help="enable the ESCALATE action by wiring a stronger executor model "
+                         "(OpenRouter slug, e.g. anthropic/claude-haiku-4-5); billed at its "
+                         "real price into the same ledger")
     # tau-bench knobs.
     ap.add_argument("--env", default="retail", help="tau-bench domain: retail | airline")
     ap.add_argument("--tb-split", default="test", help="tau-bench task split: train | dev | test")
@@ -169,6 +173,17 @@ def main() -> None:
             difficulty_fn = RolloutProcessVerifier(
                 executor, terminal, n_rollouts=args.diff_rollouts).difficulty
 
+        # ESCALATE target: a stronger (pricier) executor the controller can hand a
+        # step to. Built with the SAME tools as the cheap executor so only the model
+        # differs; billed into the same ledger at its real price. Absent => the
+        # ESCALATE action is masked in the runner and the loop is the usual 4-action one.
+        strong_executor = None
+        if args.escalate_model:
+            strong_executor = Executor(client, args.escalate_model, tools=bench.tools(),
+                                       max_steps=cfg["executor"]["max_steps"],
+                                       temperature=cfg["executor"]["temperature"])
+            print(f"ESCALATE target model: {args.escalate_model}")
+
         eval_trace_log = TraceLog(eval_out)   # eval_out defined above with the overwrite guard
         reports = self_improve(
             train, eval_, executor, verifier, terminal,
@@ -177,6 +192,7 @@ def main() -> None:
             seed=args.seed, fit_window=args.fit_window, trace_log=trace_log,
             eval_trace_log=eval_trace_log,
             difficulty_fn=difficulty_fn,
+            strong_executor=strong_executor,
         )
 
     print(f"\nself-improvement curve ({args.benchmark}/{args.learner}, "

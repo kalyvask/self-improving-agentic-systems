@@ -63,6 +63,7 @@ def self_improve(
     trace_log=None,
     eval_trace_log=None,
     difficulty_fn=None,
+    strong_executor: Executor | None = None,
 ) -> list[RoundReport]:
     cfg = cfg or RunConfig()
     accumulated: list[TaskTrace] = []
@@ -85,14 +86,15 @@ def self_improve(
         ev = run_round(eval_tasks, alloc, executor, verifier, terminal,
                        planner=planner, cfg=cfg, policy_name=f"{name}@r{rnd}",
                        explore=False, update=False, difficulty_fn=difficulty_fn,
-                       trace_log=eval_trace_log)
+                       trace_log=eval_trace_log, strong_executor=strong_executor)
         return summarize_round(ev, cfg.currency)
 
     # Round 0: bandit cold start.
     bandit = BanditAllocator(seed=seed)
     train_traces = run_round(train_tasks, bandit, executor, verifier, terminal,
                              planner=planner, cfg=cfg, policy_name="bandit",
-                             explore=True, trace_log=trace_log, difficulty_fn=difficulty_fn)
+                             explore=True, trace_log=trace_log, difficulty_fn=difficulty_fn,
+                             strong_executor=strong_executor)
     accumulated += train_traces
     reports.append(RoundReport(
         round=0, policy="bandit",
@@ -107,7 +109,8 @@ def self_improve(
         alloc.fit(_fit_set())
         train_traces = run_round(train_tasks, alloc, executor, verifier, terminal,
                                  planner=planner, cfg=cfg, policy_name=learner,
-                                 explore=True, trace_log=trace_log, difficulty_fn=difficulty_fn)
+                                 explore=True, trace_log=trace_log, difficulty_fn=difficulty_fn,
+                                 strong_executor=strong_executor)
         accumulated += train_traces
         reports.append(RoundReport(
             round=r, policy=learner,

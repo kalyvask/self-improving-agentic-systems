@@ -29,9 +29,16 @@ class Action(str, Enum):
     DEEPER = "deeper"
     DECOMPOSE = "decompose"
     STOP = "stop"
+    # ESCALATE: hand the current step to a STRONGER (more expensive) model. The only
+    # lever that lifts solve past the cheap model's capability ceiling; billed at the
+    # strong model's price so the policy must learn to spend it only where it pays off.
+    ESCALATE = "escalate"
 
 
 SPEND_ACTIONS = (Action.WIDER, Action.DEEPER, Action.DECOMPOSE)
+# The bandit's exploration arms: the cheap spends plus ESCALATE (gated in the runner
+# on a strong executor being available, like DECOMPOSE is gated on a planner).
+BANDIT_ARMS = (Action.WIDER, Action.DEEPER, Action.DECOMPOSE, Action.ESCALATE)
 
 
 @dataclass
@@ -132,21 +139,21 @@ class BanditAllocator(Allocator):
     def __init__(self, stop_threshold: float = 0.02, seed: int | None = None) -> None:
         self.stop_threshold = stop_threshold
         self._rng = np.random.default_rng(seed)
-        # Beta(alpha, beta) per spend-action.
-        self._alpha = {a: 1.0 for a in SPEND_ACTIONS}
-        self._beta = {a: 1.0 for a in SPEND_ACTIONS}
+        # Beta(alpha, beta) per spend-action (cheap spends + ESCALATE).
+        self._alpha = {a: 1.0 for a in BANDIT_ARMS}
+        self._beta = {a: 1.0 for a in BANDIT_ARMS}
 
     def decide(self, feats: NodeFeatures, currency: str, *, explore: bool = False) -> Decision:
         # Thompson sampling already explores, so `explore` is a no-op here; it
         # exists only to share the Allocator.decide signature with BC/DPO.
         samples: dict[Action, float] = {}
-        for a in SPEND_ACTIONS:
+        for a in BANDIT_ARMS:
             samples[a] = float(self._rng.beta(self._alpha[a], self._beta[a]))
         # Gate decompose on the cheap decomposability probe so we don't waste a
         # plan on an atomic task (the policy still learns to refine this).
         samples[Action.DECOMPOSE] *= max(feats.decomposability, 1e-3)
 
-        best = max(SPEND_ACTIONS, key=lambda a: samples[a])
+        best = max(BANDIT_ARMS, key=lambda a: samples[a])
         if samples[best] < self.stop_threshold:
             chosen = Action.STOP
         else:

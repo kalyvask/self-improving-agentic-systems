@@ -101,6 +101,7 @@ def run_task(
     explore: bool = False,
     update: bool = True,
     difficulty_fn=None,
+    strong_executor: Executor | None = None,
 ) -> TaskTrace:
     cfg = cfg or RunConfig()
     ledger = CostLedger()
@@ -151,6 +152,14 @@ def run_task(
                      if a not in (Action.DECOMPOSE, Action.STOP)}
             if avail:
                 decision = Decision(action=max(avail, key=avail.get), scores=decision.scores)
+        # Mask ESCALATE when no stronger model is wired in (analogous to the DECOMPOSE
+        # mask): otherwise it would be a logged no-op. Re-pick the best cheap spend so
+        # a masked ESCALATE does not silently become a STOP (fake abstention).
+        if decision.action == Action.ESCALATE and strong_executor is None:
+            avail = {a: v for a, v in decision.scores.items()
+                     if a not in (Action.ESCALATE, Action.STOP, Action.DECOMPOSE)}
+            if avail:
+                decision = Decision(action=max(avail, key=avail.get), scores=decision.scores)
         cost_before = ledger.amount(cfg.currency)
 
         if decision.action == Action.STOP:
@@ -191,6 +200,16 @@ def run_task(
             new_traj = _run_decompose(task, planner, executor, ledger, pg)
             if new_traj is not None:
                 trajectories.append(new_traj)
+
+        elif decision.action == Action.ESCALATE and strong_executor is not None:
+            # Hand the task to the stronger model: a fresh attempt on the same task,
+            # billed into the SAME ledger at the strong model's (higher) price. Credit
+            # then flows through the normal value_per_cost rule -- a strong solve that
+            # the cheap model could not reach is reinforced, but its higher cost makes
+            # it strictly worse than a cheap solve, so the policy learns to escalate
+            # only when cheap attempts are failing.
+            new_traj = strong_executor.run(task, ledger=ledger, parallel_group=pg)
+            trajectories.append(new_traj)
 
         # Score whatever we just produced. For a COMPLETED trajectory the terminal
         # grade is exact (and free on arithmetic; env-carried on tau-bench), so use
@@ -311,13 +330,15 @@ def run_round(
     update: bool = True,
     trace_log=None,
     difficulty_fn=None,
+    strong_executor: Executor | None = None,
 ) -> list[TaskTrace]:
     """Run every task once; optionally append each trace to a TraceLog."""
     traces: list[TaskTrace] = []
     for task in tasks:
         tr = run_task(task, allocator, executor, verifier, terminal,
                       planner=planner, cfg=cfg, policy_name=policy_name,
-                      explore=explore, update=update, difficulty_fn=difficulty_fn)
+                      explore=explore, update=update, difficulty_fn=difficulty_fn,
+                      strong_executor=strong_executor)
         traces.append(tr)
         if trace_log is not None:
             trace_log.append(tr)

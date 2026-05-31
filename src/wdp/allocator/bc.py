@@ -22,8 +22,11 @@ import numpy as np
 from wdp.allocator.policy import Action, Allocator, Decision, NodeFeatures
 from wdp.allocator.linear import LinearSoftmaxPolicy
 
-# Fixed, ordered action vocabulary shared by every trainable policy.
-ACTIONS: list[Action] = [Action.WIDER, Action.DEEPER, Action.DECOMPOSE, Action.STOP]
+# Fixed, ordered action vocabulary shared by every trainable policy. ESCALATE is
+# appended last so existing 4-action policy weights/indices are unchanged; a policy
+# trained without escalation data simply never learns to prefer index 4.
+ACTIONS: list[Action] = [Action.WIDER, Action.DEEPER, Action.DECOMPOSE,
+                         Action.STOP, Action.ESCALATE]
 _INDEX = {a.value: i for i, a in enumerate(ACTIONS)}
 
 
