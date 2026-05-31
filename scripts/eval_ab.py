@@ -1,5 +1,13 @@
 """Frozen-policy eval A/B: round-0 bandit vs the fitted DPO policy.
 
+SCOPE / WARNING: this is a pre-ESCALATE A/B harness. It builds a SINGLE
+TauReActExecutor and has NO --escalate-model path, so it CANNOT evaluate the
+weak->strong cascade -- do not use it for any cascade cost/solve claim. For
+cascades, run the arms via `run_selfimprove.py --escalate-model ...` and compare
+the eval files with `analyze_eval.py --ab2 FILE_A FILE_B` (cross-file paired,
+reports mean and p95). This script remains valid only for the 2-policy
+(bandit vs learner) single-model comparison it was written for.
+
 The per-round self-improvement curve is starved for resolution on a tiny eval
 split (5 tasks => 0.20 granularity). This script isolates the comparison: it
 takes the traces a prior `run_selfimprove` run already collected, reconstructs
