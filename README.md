@@ -159,8 +159,50 @@ abstain-after-{2,3,4}: **k=3 is the operating point** because it holds solve at 
 few solves down to ~0.77 for the same cost) while cutting premature stops to 1 of 7 (k=2 had 3;
 k=4 over-conserves and gives the cost back). The one remaining ceiling is capability, not
 allocation: solve tops out at ~0.84 (Haiku's own ability on this suite), and lifting it needs the
-planned ESCALATE-to-a-stronger-model action, since better allocation of one model cannot exceed
+ESCALATE-to-a-stronger-model action below, since better allocation of one model cannot exceed
 what that model can do.
+
+### Second experiment: a weak→strong cascade (ESCALATE)
+
+The first experiment spends one model's compute efficiently. The capstone adds a fifth action,
+**ESCALATE** — hand the step to a stronger, pricier model — and asks the complementary question:
+*can a learned controller run a cheap model and escalate only the tasks it can't do, to reach the
+strong model's accuracy for less than always using it?* This is the production cascade pattern.
+
+Getting an honest test bed took work: a measurement diagnostic (`analyze_eval.py --oracle`,
+classifying every miss as premature-STOP / recoverable / capability-ceiling) showed the existing
+benchmarks have **no capability ceiling** — Haiku-4.5 solves all of them with or without a
+calculator, so escalation has nothing to add. The capability gap isn't in the tasks, it's in the
+*model*: the cascade runs **claude-3-haiku** (cheap) and escalates to **Haiku-4.5** (strong) on a
+no-calculator arithmetic tier where the cheap model genuinely fails a fraction.
+
+Two findings, both from measurement catching a wrong default:
+
+1. **A naive ESCALATE collapses to "always escalate"** — escalating at step 0 is a sure one-call
+   solve, so the bandit locks onto it and the policy clones it, giving the strong model's cost with
+   no saving. The fix is *semantic*: ESCALATE is a **rescue**, gated to fire only after the cheap
+   model has attempted and missed (`n_children ≥ 1`). That one constraint is what makes escalation
+   selective.
+2. **The cascade only saves cost when the cheap model is both cheaper and capable enough.** An
+   8B model at 0.17 single-attempt solve doesn't help (its retry cost ≈ one strong call, so
+   always-escalate is genuinely near-optimal — the policy was right). claude-3-haiku at ~0.88 does.
+
+With the rescue gate and a calibrated budget, the learned cascade **matches Haiku-4.5's solve rate
+at ~37% lower cost, escalating only ~42% of tasks**:
+
+![Weak→strong cascade frontier](artifacts/cascade_frontier.png)
+
+| arm | solve | mean cost/task | escalate rate |
+|-----|-------|----------------|---------------|
+| claude-3-haiku only | 0.88 | $0.00038 | — |
+| **learned cascade** | **1.00** | **$0.00079** | **0.42** |
+| Haiku-4.5 only (ceiling) | 1.00 | $0.00125 | — |
+
+Paired, 24-task eval, cascade vs Haiku-4.5-only: solve **1.00 vs 1.00** (McNemar p=1.0, tied), cost
+delta **−0.000 [−0.001, −0.000] (95% bootstrap CI excludes 0 → resolved cheaper)**. The controller
+learned to try the cheap model first and escalate only the tasks it fails — reaching the strong
+model's accuracy for ~⅔ of its cost. (This is a separate experiment from the cost result above; it
+uses a different cheap/strong model pair and is not mixed into the single-model numbers.)
 
 ---
 

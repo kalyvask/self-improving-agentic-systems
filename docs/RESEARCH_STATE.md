@@ -114,6 +114,23 @@ Cascade story: "small cheap model handles the easy share; learned controller esc
 can't solve to a frontier model -> near-Haiku solve at a fraction of Haiku-only cost." calib4
 Haiku-only cost result stays SEPARATE (two experiments).
 
+**PHASE 5 FINAL (CASCADE WIN -- DONE, in README + cascade_frontier.png):** weak->strong cascade
+works. cheap=claude-3-haiku, strong=Haiku-4.5, no-calc graded tasks, budget 0.0008, cost-weight 1.5.
+Learned cascade (dpo@r2): **solve 1.00 @ $0.00079, escalate_rate 0.42** vs Haiku-4.5-only 1.00 @
+$0.00125 -> **~37% cheaper at equal solve, paired cost delta -0.000 [-0.001,-0.000] RESOLVED,
+McNemar p=1.0**. claude-3-haiku-only = 0.88 @ $0.00038 (the cascade recovers the 0.12 gap by
+escalating). TWO KEY FIXES en route: (1) naive ESCALATE collapses to always-escalate-at-step-0
+(sure 1-call solve -> bandit locks on -> clone) -- fixed by gating ESCALATE on n_children>=1 (it is
+a RESCUE after a cheap miss, not a step-0 shortcut); (2) cascade only saves cost when cheap model is
+BOTH cheaper AND capable -- llama-8b (0.17 single-attempt, retry-cost ~= 1 Haiku call) gave NO
+saving (always-escalate genuinely ~optimal, policy was right); claude-3-haiku (0.88) does. cost-weight
+0.5->1.5 pushed escalate 0.50->0.42, saving 29%->37% at solve 1.0. Files: casc3_A_c3h (cheap-only),
+casc5_B_cw15 (cascade), casc2_C_haikuonly (ceiling). This is a SEPARATE experiment from calib4
+(different cheap/strong pair; not mixed into single-model numbers). Remaining optional: push
+cost-weight higher / let policy retry cheap before escalating (more saving toward ~60% theoretical);
+tau-bench transfer (credibility); Opus as strong target if a bigger lift is wanted. Phase 4 alt-test
+is structurally satisfied (rescue gate conditions escalation on the cheap-attempt outcome).
+
 **PHASE 5 RESULT v1 (uncalibrated budget -- cascade NOT selective; diagnosed + re-running):**
 ESCALATE built (Phase 3, 52 tests). 3-arm eval (60 graded no-calc tasks, budget 0.02, dpo@r2):
 A llama-only solve 0.62 @ $0.00103; **B cascade solve 1.00 @ $0.00124 but escalate_rate 1.00**;

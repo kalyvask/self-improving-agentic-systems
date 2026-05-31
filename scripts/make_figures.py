@@ -243,7 +243,40 @@ def fig_frontier():
     fig.tight_layout(); fig.savefig(ART / "cost_solve_frontier.png", dpi=130); plt.close(fig)
 
 
+def fig_cascade():
+    """Capstone: the weak->strong ESCALATE cascade. Cheap model (claude-3-haiku) only,
+    vs the learned selective cascade (escalate the misses to Haiku-4.5), vs Haiku-4.5
+    only. The cascade sits at the strong model's solve height but well left of it on
+    cost -- the win is 'near-strong solve, far-below-strong cost, selectively'."""
+    try:
+        pts = {
+            "claude-3-haiku only":     _arm("casc3_A_c3h_eval.jsonl", "dpo@r2"),
+            "learned cascade":         _arm("casc5_B_cw15_eval.jsonl", "dpo@r2"),
+            "Haiku-4.5 only (ceiling)": _arm("casc2_C_haikuonly_eval.jsonl", "dpo@r2"),
+        }
+    except (FileNotFoundError, ZeroDivisionError):
+        print("skip cascade: calib5 eval traces missing"); return
+    colors = {"claude-3-haiku only": "#C44E52", "learned cascade": "#4C72B0",
+              "Haiku-4.5 only (ceiling)": "#55A868"}
+    fig, ax = plt.subplots(figsize=(7, 5))
+    for name, (sc, (m, lo, hi)) in pts.items():
+        ax.errorbar(m, sc.point, xerr=[[m - lo], [hi - m]],
+                    yerr=[[sc.point - sc.lo], [sc.hi - sc.point]],
+                    fmt="o", ms=9, capsize=4, color=colors[name], label=name)
+        ax.annotate(name, (m, sc.point), textcoords="offset points", xytext=(8, 6), fontsize=9)
+    c = pts["Haiku-4.5 only (ceiling)"]; d = pts["learned cascade"]
+    ax.annotate("", xy=(d[1][0], d[0].point), xytext=(c[1][0], c[0].point),
+                arrowprops=dict(arrowstyle="->", color="gray", lw=1.5, ls="--"))
+    ax.text(0.5, 0.06, "cascade: matches strong-model solve at ~37% lower cost (escalates ~42%)",
+            transform=ax.transAxes, ha="center", color="gray", fontsize=9)
+    ax.set(xlabel="mean cost per task ($)", ylabel="solve rate (24-task eval)",
+           title="Weak->strong cascade: selective ESCALATE reaches strong solve, cheaper")
+    ax.grid(alpha=0.3); ax.legend(loc="lower right")
+    fig.tight_layout(); fig.savefig(ART / "cascade_frontier.png", dpi=130); plt.close(fig)
+
+
 def main():
+    fig_cascade(); print("wrote cascade_frontier.png")
     fig_frontier(); print("wrote cost_solve_frontier.png")
     fig_curves(); print("wrote self_improvement_curves.png")
     fig_collapse(); print("wrote collapse_and_fix.png")
