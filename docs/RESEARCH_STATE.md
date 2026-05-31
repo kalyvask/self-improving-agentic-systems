@@ -41,16 +41,20 @@ Latest commit on main: **1cfa1a9** (all pushed, 48 offline tests pass, tree clea
 
    **Plan = implement the offline fixes, THEN a single rerun, THEN escalate** (user-confirmed
    order; a 2nd model + ours agree on the fixes):
-   - **(a) Teach STOP** (offline): add STOP exploration during collection + a rule "decomp=0 &
-     no progress after k attempts & scores~0 -> STOP"; add a `zero_score_attempts` (or
-     all_attempts_failed) feature; keep abstention_credit < solve_floor (drift guard).
-   - **(b) Make DECOMPOSE selective** via **DPO lexicographic pair-mining** (offline): prefer
-     solved>failed, then cheaper WITHIN the same decomposability bucket + similar score/budget;
-     never pair a cheap failure over an expensive solve. (The decomp=0 hard-mask is already in.)
-   - **(c) THEN one consolidated rerun** (`calib3_*`, --overwrite, single wrapper): expect
-     same ~0.84 solve/utility at LOWER cost (mask + selective decompose) and STOP catching the
-     ~6 underspecified eval tasks (utility up). Headline metric = PAIRED COST; DPO is the most
-     promising learner.
+   - **(a) Teach STOP — DONE** (`00c4df5`): hopeless-task rule (decomp=0 & no progress after k
+     attempts & scores~0 -> STOP), gated by `--stop-after-failed-attempts` (default off). Gives
+     STOP data + saves budget; abstention_credit<solve_floor guards drift. (A learned version
+     with a `zero_score_attempts` feature + STOP exploration is the future refinement.)
+   - **(b) Selective DECOMPOSE — LIKELY ALREADY SUBSUMED, verify in rerun:** solve_floor makes an
+     expensive solve (>=0.6) out-rank a cheap failure (0), and `_bucket_key` already pairs within
+     the decomposability bucket, so DPO pair-mining is roughly lexicographic already. If the rerun
+     still shows DECOMPOSE over-used / cost not improving, THEN add explicit lexicographic mining.
+   - **(c) NEXT: one consolidated rerun** (`calib3_*`, --overwrite, single wrapper, ADD
+     `--stop-after-failed-attempts 2`): `for L in bc dpo kto; do python scripts/run_selfimprove.py
+     --learner $L --benchmark arithmetic --atomic 60 --multi 40 --underspecified 10 --budget 0.003
+     --max-decisions 8 --rounds 3 --seed 0 --stop-after-failed-attempts 2 --out
+     traces/calib3_${L}.jsonl --overwrite; done`. Expect ~0.84 solve at LOWER cost (mask) + STOP
+     catching the ~6 underspecified eval tasks (utility up, cost down). Headline = PAIRED COST.
    - **(d) THEN ESCALATE capstone** (task #54): the only lever past the ~0.84 Haiku ceiling;
      learn cheap-Haiku-first, Opus-only-when-stuck; then tau-bench on paired cost.
    Validate each fix offline before the rerun (recompute/refit on existing traces where possible).
