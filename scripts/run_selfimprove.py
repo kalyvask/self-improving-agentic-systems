@@ -63,6 +63,19 @@ def _build_taubench(args, cfg, client):
     from wdp.benchmarks import TauBenchBenchmark, TauReActExecutor
 
     models = cfg["models"]
+    # Guard #2: tau's default agent model is models["executor"] (Opus in config), so a
+    # cascade run without an explicit, DIFFERENT --agent-model would silently be
+    # strong->strong (or strong->weaker). Require both to be set and distinct.
+    if args.escalate_model and (not args.agent_model or args.agent_model == args.escalate_model):
+        raise SystemExit("tau cascade requires an explicit --agent-model (the cheap model) "
+                         "that DIFFERS from --escalate-model; otherwise the 'cheap' model "
+                         "defaults to the config executor (Opus) and the cascade is meaningless.")
+    # Guard #5: tau tasks are all solvable, so TauTerminalVerifier.score_abstention is
+    # always 0 -- a forced STOP can only buy cost by giving up. Warn against it on tau.
+    if args.stop_after_failed_attempts:
+        print("WARNING: --stop-after-failed-attempts on tau-bench abstains on solvable tasks "
+              "(abstention reward is always 0 here); it can lower cost only by losing solves. "
+              "Recommend 0 for tau.")
     bench = TauBenchBenchmark(env_name=args.env, split=args.tb_split,
                               task_indices=list(range(args.n_tasks)))
     tasks = bench.tasks()
@@ -198,6 +211,11 @@ def main() -> None:
                     user_model=args.user_model, user_provider=args.user_provider,
                     max_steps=cfg["executor"]["max_steps"],
                     temperature=cfg["executor"]["temperature"])
+                print("NOTE: on tau-bench, ESCALATE opens a FRESH env attempt with the strong "
+                      "model (a strong retry), NOT a mid-conversation handoff of the cheap env. "
+                      "Frame the result as 'retry with a stronger model'. User-simulator cost "
+                      "runs through tau/litellm and is NOT in the ledger, so reported cost is "
+                      "AGENT cost only.")
             else:
                 strong_executor = Executor(client, args.escalate_model, tools=bench.tools(),
                                            max_steps=cfg["executor"]["max_steps"],
