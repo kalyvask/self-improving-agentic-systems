@@ -9,7 +9,7 @@ what the system is, what we have measured, the bugs we found and fixed, the open
 problems, our hypotheses, and the concrete improvement directions under review. It is
 deliberately honest about what does NOT work yet.
 
-Repo: https://github.com/kalyvask/self-improving-agentic-system
+Repo: https://github.com/kalyvask/self-improving-agentic-systems
 Local: `C:\Users\alexa\OneDrive\Documents\GSB\claude\wdp-controller`
 Course: Stanford CS329A (Self-Improving AI Agents). Reading list:
 `C:\Users\alexa\OneDrive\Documents\GSB\CS329A Self-Improving AI Agents\readings`

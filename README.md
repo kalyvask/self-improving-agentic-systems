@@ -1,4 +1,4 @@
-# self-improving-agentic-system (wdp-controller)
+# self-improving-agentic-systems (wdp-controller)
 
 A self-improving controller that decides how to spend the next unit of compute on
 a tool-using agent task. At each decision node it picks one of four actions:
