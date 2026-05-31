@@ -38,6 +38,11 @@ class RunConfig:
     solve_floor: float = 0.6             # min cost-efficiency for a solve (> abstention_credit)
     stop_after_failed_attempts: int = 0  # >0: abstain (STOP) on a non-decomposable task after
                                          # this many attempts with no progress (0 = disabled)
+    escalate_after: int = 1              # ESCALATE is masked until the cheap model has made
+                                         # this many attempts. 1 = escalate after a single miss;
+                                         # 2 = require a cheap RETRY first (cuts over-escalation:
+                                         # tasks the cheap model can do on a 2nd try cost a cheap
+                                         # call, not a strong one).
 
 
 def _features(
@@ -163,7 +168,8 @@ def run_task(
         # cost saving. Forcing one cheap attempt first makes the policy learn to escalate
         # only the tasks the cheap model actually missed (selective). Re-pick the best
         # cheap spend so a masked ESCALATE never silently becomes a STOP (fake abstention).
-        if decision.action == Action.ESCALATE and (strong_executor is None or len(trajectories) == 0):
+        if decision.action == Action.ESCALATE and (strong_executor is None
+                                                    or len(trajectories) < cfg.escalate_after):
             avail = {a: v for a, v in decision.scores.items()
                      if a not in (Action.ESCALATE, Action.STOP, Action.DECOMPOSE)}
             nxt = max(avail, key=avail.get) if avail else Action.WIDER

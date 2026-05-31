@@ -117,6 +117,9 @@ def main() -> None:
                     help="enable the ESCALATE action by wiring a stronger executor model "
                          "(OpenRouter slug, e.g. anthropic/claude-haiku-4-5); billed at its "
                          "real price into the same ledger")
+    ap.add_argument("--escalate-after", type=int, default=1,
+                    help="cheap attempts required before ESCALATE is allowed (1=after one miss; "
+                         "2=force a cheap retry first, cutting over-escalation)")
     # tau-bench knobs.
     ap.add_argument("--env", default="retail", help="tau-bench domain: retail | airline")
     ap.add_argument("--tb-split", default="test", help="tau-bench task split: train | dev | test")
@@ -144,7 +147,8 @@ def main() -> None:
                         max_decisions=args.max_decisions,
                         cost_weight=args.cost_weight,
                         abstention_credit=args.abstention_credit,
-                        stop_after_failed_attempts=args.stop_after_failed_attempts)
+                        stop_after_failed_attempts=args.stop_after_failed_attempts,
+                        escalate_after=args.escalate_after)
     out = args.out or str(Path(cfg["paths"]["traces"]) / "traces.jsonl")
     # Append-only TraceLog is a contamination footgun: a re-run silently appends to
     # (or interleaves with) an existing file. Refuse pre-existing outputs unless
