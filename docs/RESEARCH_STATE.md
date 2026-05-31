@@ -95,6 +95,21 @@ any Opus judge in front of it) has nothing to demonstrate. The cost thesis is DO
 ~20-40%** (Step 0 in `docs/ESCALATE_DESIGN.md`), gated by re-running `--oracle` until
 capability_ceiling lands in that band.
 
+**PHASE 0 RESULT (hard-arith-v1 -- NO CEILING, blocked, awaiting direction):** Added a `hard`
+tier (`--hard N`): multi-hop word problems, tangled prose, distractor numbers, a final conditional,
+non-decomposable. Live Haiku probe (30 tasks, 2 rounds, `traces/hard_probe*`): eval solve **1.00**
+for bandit AND dpo, oracle = **0 solvable misses**. So Haiku-4.5 + the calc tool is
+capability-SATURATED on arithmetic -- the calc tool removes the only hard part, and prose
+tangling/distractors/conditionals are not enough. The Haiku<->Opus gap is NOT in computation; it is
+in reasoning-setup or only appears once the calculator crutch is gone. Manufacturing an honest
+ceiling needs a different lever. Options put to the user (DISMISSED -- waiting for instruction):
+(1) remove calc on hard tasks (in-context multi-step arithmetic; synthetic but reliable, cheap),
+(2) bigger tau-bench split (realistic, more spend; n=7 earlier was too small to show a ceiling),
+(3) derivation word problems (rate/mixture/systems; uncertain it breaks Haiku), (4) keep ESCALATE
+design-only (no honest ceiling -> don't run live; the proven cost thesis stands alone).
+Phase 0 code is committed (b62615c); the `--hard` tier + `_hard_problem` generator are in place and
+reusable. Phases 1-5 are BLOCKED on the ceiling decision.
+
 **ESCALATE design is written: `docs/ESCALATE_DESIGN.md`** -- the validated answer to the
 "Opus-judge-before-escalation" question. Verdict: an Opus judge in the LIVE loop is invalid here
 (free ground truth makes it pure cost; judge tier > execution tier inverts cascade economics). The
