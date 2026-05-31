@@ -50,7 +50,30 @@ SELECTIVE** -- it solves multi tasks but does not net a cost win. The next lever
 selective decompose (only the hard multi) and/or ESCALATE; STOP-exploration still open.
 Solve is capped ~0.84 (Haiku ceiling), so cost is the only axis with headroom.
 
-## >>> PICK UP HERE (next session) <<<
+## >>> PICK UP HERE (next session) -- analyze the calib4 k-sweep FIRST <<<
+
+A **DPO STOP-selectivity k-sweep is RUNNING** (bg `bkklrfxmj`): dpo at
+`--stop-after-failed-attempts` k=2,3,4, with the mask->spend and DEEPER-honest fixes now in.
+Outputs `traces/calib4_dpo_k{2,3,4}.jsonl` (+ `_eval.jsonl`). **First: is it done?**
+`wc -l traces/calib4_dpo_k4.jsonl` == 264 and no ~200MB python worker = finished; one wrapper only.
+If an arm died, rerun just it: `python scripts/run_selfimprove.py --learner dpo --benchmark
+arithmetic --atomic 60 --multi 40 --underspecified 10 --budget 0.003 --max-decisions 8 --rounds 3
+--seed 0 --stop-after-failed-attempts <K> --out traces/calib4_dpo_k<K>.jsonl --overwrite`.
+
+**Then analyze (the question: did mask+DEEPER fixes recover solve toward ~0.86 while cost stays
+~halved, and which k minimizes PREMATURE stops?):** for each k run
+`python scripts/analyze_eval.py --ab traces/calib4_dpo_k<K>_eval.jsonl` (paired cost bandit@r0 vs
+dpo@r3; reports CHEAPER/EXPENSIVE) and
+`python scripts/analyze_eval.py --stops traces/calib4_dpo_k<K>_eval.jsonl --stops-policy dpo@r3`
+(NEW: correct vs premature STOP). Pick the k with best solve/utility at low cost AND fewest
+premature stops. **Refresh the frontier figure** from the winning k (point make_figures at the
+calib4 winner; it currently reads calib3).
+
+**Then (step 2, CONDITIONAL):** if premature stops persist or hard-atomic solve is still capped,
+add evidence-gated learned STOP (decomp==0 & n_children>=k & score_max<=eps & no progress) and
+the true DEEPER "review+revise the completed answer" mode (needs executor support). Then ESCALATE.
+
+## >>> earlier PICK UP notes (still relevant for context) <<<
 
 Latest commit on main: **1cfa1a9** (all pushed, 48 offline tests pass, tree clean).
 
