@@ -31,7 +31,8 @@ def _build_arithmetic(args, cfg, client):
     """Local arithmetic suite: cheap, fully offline-gradable, DECOMPOSE applies."""
     models = cfg["models"]
     bench = ArithmeticBenchmark(n_atomic=args.atomic, n_multi=args.multi,
-                                n_underspecified=args.underspecified, seed=args.seed)
+                                n_underspecified=args.underspecified,
+                                n_hard=args.hard, seed=args.seed)
     tasks = bench.tasks()
     train, eval_ = split(tasks, frac_train=args.frac_train, seed=args.seed)
     executor = Executor(client, models["cheap"], tools=bench.tools(),
@@ -92,6 +93,9 @@ def main() -> None:
     ap.add_argument("--atomic", type=int, default=8)
     ap.add_argument("--multi", type=int, default=6)
     ap.add_argument("--underspecified", type=int, default=2)
+    ap.add_argument("--hard", type=int, default=0,
+                    help="number of hard multi-hop word problems (capability-limited; "
+                         "non-decomposable, for the ESCALATE regime)")
     # tau-bench knobs.
     ap.add_argument("--env", default="retail", help="tau-bench domain: retail | airline")
     ap.add_argument("--tb-split", default="test", help="tau-bench task split: train | dev | test")
