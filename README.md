@@ -11,6 +11,22 @@ a tool-using agent task. At each decision node it picks one of four core actions
 plus an optional fifth action, `ESCALATE` (hand the step to a stronger, pricier
 model), enabled only for the weak->strong cascade experiment below.
 
+**Why it matters.** As model labs move to token-based billing, *how* an agent spends
+compute is becoming as load-bearing as whether it succeeds. Solving the same task for
+half the tokens, escalating to a bigger model only on the tasks that need it, or
+stopping instead of looping is real money at scale, and that gap widens the longer
+agents run and the more they pay per token. So the controller is judged on **cost per
+solved task**, not accuracy alone, with a measurement-rigor layer (Wilson and bootstrap
+confidence intervals, McNemar, Rasch task difficulty, an alternative-annotator test on
+the cheap verifier, and an oracle-rescue diagnostic that classifies every miss) so each
+cost and solve-rate claim is resolved, not eyeballed. Two results on a calibrated
+arithmetic suite, both with paired-cost intervals that exclude zero: the learned DPO
+policy matches a cold-start baseline's solve rate at roughly half the cost (by
+decomposing multi-part tasks and abstaining on hopeless ones); and a learned weak->strong
+cascade (a cheap model that retries once, then escalates only the tasks it still fails)
+reaches a stronger model's solve rate at 36-47% lower mean cost across two seeds while
+escalating under 40% of tasks.
+
 The controller (the Allocator) is a small, CPU-trainable policy over cheap numeric
 features, not a fine-tuned LLM. Executors are frontier models called through
 OpenRouter. The expensive part is collecting traces; the policy update is cheap.
