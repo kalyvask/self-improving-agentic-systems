@@ -74,10 +74,36 @@ def analyze_ab(path: str) -> None:
     def cost(t):
         return (t.total_cost or {}).get(t.currency, 0.0)
 
+    def solvable(t):       # a real gold answer exists (not an underspecified-abstain task)
+        return t.abstention_reward < 0.5
+
+    def stopped(t):
+        return any(d.action == "stop" for d in t.decisions)
+
+    def utility(t):        # solved OR correctly abstained on an unsolvable task
+        return solved(t) or ((not solved(t)) and t.abstention_reward >= 0.5)
+
+    def premature_stop(t):  # gave up on a task that actually had an answer
+        return stopped(t) and solvable(t) and not solved(t)
+
     ka = sum(solved(a[t]) for t in shared)
     kb = sum(solved(b[t]) for t in shared)
     print(f" solve rate {a_name:>7}: {wilson_ci(ka, n)}")
     print(f" solve rate {b_name:>7}: {wilson_ci(kb, n)}")
+
+    # Frontier is now mostly controlled by STOP quality, so a cost win must be read
+    # next to whether it was bought by giving up. Report both arms side by side.
+    n_solvable = sum(solvable(a[t]) for t in shared)
+    print(f"\n quality, beyond raw solve (n_solvable={n_solvable}):")
+    print(f"   {'metric':<16}{a_name:>10}{b_name:>10}")
+    for label, fn, denom in (
+        ("solvable_solve", lambda t: solved(t) and solvable(t), n_solvable),
+        ("utility",        utility,        n),
+        ("premature_stop", premature_stop, n),
+    ):
+        ra = sum(fn(a[t]) for t in shared) / denom if denom else 0.0
+        rb = sum(fn(b[t]) for t in shared) / denom if denom else 0.0
+        print(f"   {label:<16}{ra:>10.2f}{rb:>10.2f}")
 
     mc = mcnemar([(solved(a[t]), solved(b[t])) for t in shared])
     print(f"\n McNemar (paired solve): {b_name} wins {mc['b_only']}, {a_name} wins "
@@ -176,6 +202,65 @@ def analyze_stops(paths: list[str], policy: str | None = None) -> None:
             print("  (no STOP traces)")
 
 
+def analyze_oracle(paths: list[str], policy: str | None = None) -> None:
+    """Oracle-rescue: WHY does the chosen policy miss the tasks it misses? For each
+    SOLVABLE task the target policy failed, classify the miss so the right next lever
+    is obvious instead of assumed:
+      - premature_STOP : the policy abstained on a task that had a real answer.
+      - recoverable    : some OTHER policy/round in the pool solved the same task,
+                         so the model CAN do it -- the miss is allocation/training,
+                         not capability. ESCALATE would NOT help here.
+      - capability_ceiling : no policy/round ever solved it -> a stronger model
+                         (ESCALATE) is the only lever that can.
+    A high recoverable/premature share says tune STOP / train the policy; a high
+    capability share is the green light for the ESCALATE capstone (live spend)."""
+    traces = []
+    for p in paths:
+        traces.extend(TraceLog(p).read())
+    if not traces:
+        print("[oracle] no traces found."); return
+
+    def solved(t):
+        return bool(t.solved or t.terminal_reward >= 0.99)
+
+    names = sorted({t.policy for t in traces})
+    def _round(p):
+        return int(p.split("@r")[1]) if "@r" in p else -1
+    target = policy or max(names, key=_round)
+
+    # a task is "ever solved" if ANY policy/round in the pool solved it
+    ever_solved = {t.task_id for t in traces if solved(t)}
+    tgt = {t.task_id: t for t in traces if t.policy == target}
+    if not tgt:
+        print(f"[oracle] target policy {target} not in pool {names}."); return
+
+    cap, recov, prem = [], [], []
+    for tid, t in tgt.items():
+        if solved(t) or t.abstention_reward >= 0.5:   # only SOLVABLE misses
+            continue
+        stopped = any(d.action == "stop" for d in t.decisions)
+        if stopped:
+            prem.append(tid)
+        elif tid in ever_solved:                       # someone else got it
+            recov.append(tid)
+        else:
+            cap.append(tid)
+    n_miss = len(cap) + len(recov) + len(prem)
+    print(f"=== oracle rescue | target={target} | pooled policies={names} ===")
+    print(f" solvable misses by {target}: {n_miss}")
+    if not n_miss:
+        print("  (no solvable misses -- policy is at the oracle frontier)"); return
+    print(f"   premature_STOP     : {len(prem):>3}  (gave up; STOP-tuning / training lever)")
+    print(f"   recoverable        : {len(recov):>3}  (another arm solved it; allocation/training, NOT ESCALATE)")
+    print(f"   capability_ceiling : {len(cap):>3}  (nobody solved it; ESCALATE is the only lever)")
+    verdict = ("ESCALATE is justified" if cap and len(cap) >= len(recov) + len(prem)
+               else "tune STOP / train policy FIRST -- most misses are recoverable, not capability")
+    print(f"   -> {verdict}")
+    if cap:
+        print(f"   capability-ceiling tasks: {', '.join(sorted(cap)[:12])}"
+              + (" ..." if len(cap) > 12 else ""))
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--ab", help="paired trace file with exactly two policies")
@@ -186,6 +271,10 @@ def main() -> None:
     ap.add_argument("--stops", nargs="*", default=[],
                     help="trace files: split STOP into correct vs premature")
     ap.add_argument("--stops-policy", default=None, help="filter --stops to one policy tag")
+    ap.add_argument("--oracle", nargs="*", default=[],
+                    help="trace files: classify a policy's solvable misses (premature/recoverable/capability)")
+    ap.add_argument("--oracle-policy", default=None,
+                    help="target policy tag for --oracle (default: highest @rN)")
     args = ap.parse_args()
     if args.ab:
         analyze_ab(args.ab)
@@ -195,8 +284,10 @@ def main() -> None:
         analyze_verifier(args.verifier)
     if args.stops:
         analyze_stops(args.stops, args.stops_policy)
-    if not (args.ab or args.irt or args.verifier or args.stops):
-        ap.error("pass --ab, --irt, --verifier, and/or --stops")
+    if args.oracle:
+        analyze_oracle(args.oracle, args.oracle_policy)
+    if not (args.ab or args.irt or args.verifier or args.stops or args.oracle):
+        ap.error("pass --ab, --irt, --verifier, --stops, and/or --oracle")
 
 
 if __name__ == "__main__":

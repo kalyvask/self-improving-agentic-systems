@@ -140,13 +140,18 @@ def grpo_train(
 
 
 def format_grpo_curve(reports: list[GRPOReport]) -> str:
+    # 'util' = solved-or-correctly-abstained (the metric that tracks frontier quality).
+    # We deliberately do NOT surface gen_verif_gap here: completed traces now use the
+    # exact terminal reward as their process score, so that "gap" no longer measures a
+    # cheap-verifier disagreement and would mislead. It stays computed in agent_metrics
+    # for partial-trace diagnostics only.
     lines = [f"{'step':>5} {'policy':>6} {'solve':>6} {'mean_cost':>10} "
-             f"{'p95_cost':>10} {'gap':>6} {'rollouts':>9}"]
+             f"{'p95_cost':>10} {'util':>6} {'rollouts':>9}"]
     for r in reports:
         e = r.eval
         lines.append(
             f"{r.step:>5} {r.policy:>6} {e['solve_rate']:>6.2f} "
             f"{e['mean_cost']:>10.5f} {e['p95_cost']:>10.5f} "
-            f"{e['gen_verif_gap']:>6.2f} {r.n_rollouts:>9}"
+            f"{e.get('utility_rate', 0.0):>6.2f} {r.n_rollouts:>9}"
         )
     return "\n".join(lines)

@@ -336,6 +336,33 @@ def test_decompose_masked_when_no_planner():
     assert "decompose" not in [d.action for d in trace.decisions]
 
 
+def test_deeper_targets_unfinished_and_does_not_revise_a_completed_answer():
+    # DEEPER semantics contract. The runner only continues a trajectory that has
+    # genuine unfinished work (or a self-reported stall); on an all-completed set
+    # there is nothing to continue, so _deepest_unfinished returns None and the
+    # runner falls back to a fresh attempt (WIDER-equivalent) rather than a no-op
+    # "revise". This locks the behavior so the learner's DEEPER distribution is not
+    # silently misleading. A true review-and-revise mode (needs executor support)
+    # would change THIS assertion -- the test is the tripwire for that work.
+    from wdp.loop.runner import _deepest_unfinished
+
+    completed = Trajectory(task_id="t", steps=[Step(thought="x")], final_answer="42")
+    # all answered, none stalled -> no continuation target (runner does a fresh attempt)
+    assert _deepest_unfinished([completed]) is None
+
+    unfinished = Trajectory(task_id="t", steps=[Step(thought="x")], final_answer=None)
+    assert _deepest_unfinished([completed, unfinished]) is unfinished
+
+    # a self-reported give-up (stalled) IS revisable even though it has an answer
+    stalled = Trajectory(task_id="t", steps=[Step(thought="x")], final_answer="42", stalled=True)
+    assert _deepest_unfinished([stalled]) is stalled
+
+    # among several unfinished, DEEPER continues the deepest (most progressed) one
+    shallow = Trajectory(task_id="t", steps=[Step(thought="a")], final_answer=None)
+    deep = Trajectory(task_id="t", steps=[Step(thought="a"), Step(thought="b")], final_answer=None)
+    assert _deepest_unfinished([shallow, deep]) is deep
+
+
 def test_rollout_difficulty_bills_a_labeling_ledger():
     # Bug #3: forked difficulty rollouts must be billed somewhere (visible), not vanish.
     from wdp.verifier.rollout import RolloutProcessVerifier

@@ -77,17 +77,33 @@ README + frontier figure + this doc are updated and pushed. Step 2 below is NO L
 premature stops at k=3 are already low (1 of 7) and solve is back at the Haiku ceiling, so the
 evidence-gated-STOP / true-DEEPER-revise work is optional polish, not a blocker.
 
-**The next high-value lever is the ESCALATE capstone (task #54)** -- it is the only thing that can
-lift solve past the ~0.84 Haiku ceiling, since allocation of one model cannot exceed that model.
-Plan: add a 5th action ESCALATE that re-runs the current step on a stronger model (e.g. Sonnet),
-bill its higher per-token cost into the same ledger, and let the policy learn WHEN the extra spend
-is worth it (hard/underspecified tasks Haiku keeps failing). Then re-run a calib5 sweep and read
-the SAME paired-cost + solve A/B -- the win condition is solve > 0.84 at a cost the policy chose to
-pay only where it pays off. After that: tau-bench on paired cost (the transfer test).
+**KEY NEW FINDING (oracle-rescue diagnostic, `analyze_eval.py --oracle`, no spend): ESCALATE has
+ZERO headroom on the arithmetic benchmark.** Pooling every Haiku arm (calib4 k2/k3/k4 + calib3
+bc/dpo/kto = 10 policy-rounds), `dpo@r3` misses exactly **1 solvable task**, and it is a
+premature_STOP / recoverable miss -- **capability_ceiling = 0 in every pooling**. solvable_solve is
+0.97; the raw 0.84 only looks like a ceiling because 6 of 44 tasks are underspecified-abstain. So
+some Haiku config solves every solvable arithmetic task: a stronger model has nothing to add here,
+and a live ESCALATE run on arithmetic would produce a NULL result by construction. The oracle
+diagnostic just saved that spend.
 
-**Optional step 2 (only if a later run shows premature stops creeping back):** evidence-gated
-learned STOP (decomp==0 & n_children>=k & score_max<=eps & no progress) + true DEEPER
-"review+revise the completed answer" mode (needs executor support).
+**Revised next lever: do NOT run ESCALATE on arithmetic.** The cost thesis is DONE on arithmetic
+(k=3: same solve, ~40% cheaper, resolved). ESCALATE only demonstrates value where the base model
+genuinely FAILS some tasks (capability_ceiling > 0). Two honest options, pick per time budget:
+  (a) **ESCALATE on tau-bench** (the realistic, harder env) -- first run the SAME `--oracle` check on
+      the existing tau-bench Haiku traces; if capability_ceiling > 0 there, ESCALATE has real
+      headroom and that is the capstone. This is the recommended path.
+  (b) **Harder arithmetic tier** (bigger operands / more parts) sized so Haiku fails ~20-30%, then
+      ESCALATE -- cheaper to run but a synthetic ceiling, less compelling than tau-bench.
+Win condition either way: solve rises above the single-model ceiling at a cost the policy chose to
+pay ONLY on the tasks the oracle flagged as capability-limited.
+
+**Done this session (offline, pushed):** `analyze_eval.py` gained `--oracle` (miss classification)
+and folded solvable_solve / utility / premature_stop into the `--ab` headline; a DEEPER-semantics
+characterization test (`test_deeper_targets_unfinished...`) locks that DEEPER falls back to a fresh
+attempt on all-completed sets (tripwire for the future true-revise mode); gen_verif_gap dropped
+from the GRPO display (renamed to `util`) since completed traces use terminal reward as the process
+score. **Optional (only if premature stops creep back later):** evidence-gated learned STOP +
+true DEEPER review-revise mode (needs executor support).
 
 ## >>> earlier PICK UP notes (still relevant for context) <<<
 
