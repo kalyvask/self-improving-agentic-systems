@@ -187,6 +187,7 @@ def run_task(
 
         pg = f"{task.id}:step{step}"
         new_traj: Trajectory | None = None
+        escalate_mode: str | None = None
 
         if decision.action == Action.WIDER:
             new_traj = executor.run(task, ledger=ledger, parallel_group=pg)
@@ -233,10 +234,12 @@ def run_task(
                 # continue_from MUTATES `target` in place and returns it, so it is
                 # ALREADY in `trajectories` -- do NOT append (that double-counts the
                 # same attempt: inflated n_children / attempts_done_frac). Mirrors DEEPER.
+                escalate_mode = "live_handoff"
                 new_traj = strong_executor.continue_from(
                     task, target, ledger=ledger, parallel_group=pg,
                     extra_steps=cfg.deeper_extra_steps)
             else:
+                escalate_mode = "fresh_retry"
                 new_traj = strong_executor.run(task, ledger=ledger, parallel_group=pg)
                 trajectories.append(new_traj)
 
@@ -264,7 +267,7 @@ def run_task(
             action=decision.action.value,
             scores={a.value: v for a, v in decision.scores.items()},
             currency=cfg.currency, cost_before=cost_before, cost_after=cost_after,
-            process_score_after=ps,
+            process_score_after=ps, escalate_mode=escalate_mode,
         ))
 
         # Bandit online update (if the policy supports it). Skipped at eval so

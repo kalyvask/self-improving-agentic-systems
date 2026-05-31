@@ -1,12 +1,15 @@
 # self-improving-agentic-systems (wdp-controller)
 
 A self-improving controller that decides how to spend the next unit of compute on
-a tool-using agent task. At each decision node it picks one of four actions:
+a tool-using agent task. At each decision node it picks one of four core actions:
 
 - `WIDER`: spawn a fresh parallel Executor attempt from the current state
 - `DEEPER`: continue and refine the current trajectory on tool feedback
 - `DECOMPOSE`: hand the task to the Planner, producing a sub-task DAG
 - `STOP`: stop spending and abstain (a safe non-attempt)
+
+plus an optional fifth action, `ESCALATE` (hand the step to a stronger, pricier
+model), enabled only for the weak->strong cascade experiment below.
 
 The controller (the Allocator) is a small, CPU-trainable policy over cheap numeric
 features, not a fine-tuned LLM. Executors are frontier models called through
@@ -193,7 +196,7 @@ seeds**, escalating only ~29–38% of tasks:
 
 ![Weak→strong cascade frontier](artifacts/cascade_frontier.png)
 
-| arm | solve | mean cost | escalate rate |
+| arm | solve | mean cost | tasks escalated |
 |-----|-------|-----------|---------------|
 | claude-3-haiku only (seed 0) | 0.88 | $0.00038 | — |
 | **learned cascade (seed 0)** | **1.00** | **$0.00067** | **0.29** |
@@ -235,7 +238,7 @@ claude-3-haiku → Haiku-4.5 cascade was run on **tau-bench retail** (multi-turn
 customer-service tasks). It does **not** save cost there, and the reason is the boundary condition
 the arithmetic experiment already identified:
 
-| arm (tau retail, 8-task eval) | solve | mean agent cost | escalate rate |
+| arm (tau retail, 8-task eval) | solve | mean agent cost | tasks escalated |
 |---|---|---|---|
 | learned cascade | 1.00 | $0.136 | 0.88 |
 | Haiku-4.5 only | 1.00 | $0.118 | — |

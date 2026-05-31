@@ -396,6 +396,7 @@ def test_escalate_is_a_rescue_after_a_failed_cheap_attempt():
                      strong_executor=StrongSolves())
     acts = [d.action for d in trace.decisions]
     assert acts == ["wider", "escalate"]          # step 0 masked to cheap; step 1 rescues
+    assert trace.decisions[-1].escalate_mode == "fresh_retry"   # no live env -> fresh
     assert trace.solved                            # strong solved after the cheap miss
     assert (trace.total_cost or {}).get("dollars", 0.0) >= 0.0102   # cheap + strong billed
 
@@ -465,6 +466,7 @@ def test_escalate_hands_off_a_live_env_via_continue_from():
                      strong_executor=strong)
     assert [d.action for d in trace.decisions] == ["wider", "escalate"]
     assert strong.continued and not strong.ran    # resumed the env, did NOT start fresh
+    assert trace.decisions[-1].escalate_mode == "live_handoff"
     assert trace.solved
 
 

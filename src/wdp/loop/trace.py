@@ -37,6 +37,11 @@ class DecisionRecord:
     cost_before: float = 0.0              # ledger.amount(currency) before the action
     cost_after: float = 0.0               # ... after
     process_score_after: float = 0.0      # best process score visible after acting
+    # For ESCALATE only: how the strong model was invoked -- "live_handoff" (it
+    # resumed the cheap model's unfinished env/conversation) or "fresh_retry" (it
+    # started the task over). None for every non-ESCALATE action. Recorded because the
+    # "true handoff" behaviour is part of the cascade claim and should be auditable.
+    escalate_mode: str | None = None
     # Filled in by credit assignment once the task terminates:
     terminal_reward: float = 0.0
     value_per_cost: float = 0.0           # credited value / marginal cost (normalized)
