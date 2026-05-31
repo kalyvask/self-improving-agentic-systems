@@ -187,29 +187,37 @@ Two findings, both from measurement catching a wrong default:
    8B model at 0.17 single-attempt solve doesn't help (its retry cost ≈ one strong call, so
    always-escalate is genuinely near-optimal — the policy was right). claude-3-haiku at ~0.88 does.
 
-With the rescue gate and a calibrated budget, the learned cascade **matches Haiku-4.5's solve rate
-at ~37% lower MEAN cost, escalating ~42% of tasks**:
+With the rescue gate, a cheap retry before escalating (`--escalate-after 2`), and a calibrated
+budget, the learned cascade **matches Haiku-4.5's solve rate at 36–47% lower MEAN cost across two
+seeds**, escalating only ~29–38% of tasks:
 
 ![Weak→strong cascade frontier](artifacts/cascade_frontier.png)
 
 | arm | solve | mean cost | escalate rate |
 |-----|-------|-----------|---------------|
-| claude-3-haiku only (best, bandit) | 0.96 | $0.00043 | — |
-| claude-3-haiku only (dpo r2) | 0.88 | $0.00038 | — |
-| **learned cascade** | **1.00** | **$0.00079** | **0.42** |
-| Haiku-4.5 only (ceiling) | 1.00 | $0.00125 | — |
+| claude-3-haiku only (seed 0) | 0.88 | $0.00038 | — |
+| **learned cascade (seed 0)** | **1.00** | **$0.00067** | **0.29** |
+| Haiku-4.5 only (seed 0) | 1.00 | $0.00125 | — |
+| learned cascade (seed 1) | 1.00 | $0.00076 | 0.38 |
+| Haiku-4.5 only (seed 1) | 1.00 | $0.00120 | — |
 
-Paired, 24-task eval, cascade vs Haiku-4.5-only: solve **1.00 vs 1.00** (McNemar p=1.0, tied), mean
-cost delta **−0.000 [−0.001, −0.000] (95% bootstrap CI excludes 0 → resolved cheaper)**. The
-controller learned to try the cheap model first and escalate only on a miss, reaching the strong
-model's accuracy for about two-thirds of its mean cost.
+Paired, 24-task eval, cascade vs Haiku-4.5-only, **both seeds**: solve **1.00 vs 1.00**
+(McNemar p=1.0, tied), mean cost delta resolved cheaper (seed 0 **−0.001 [−0.001, −0.000]**, 47%;
+seed 1 **−0.000 [−0.001, −0.000]**, 36%). The controller learned to try the cheap model, retry it
+once, and escalate only on a second miss — reaching the strong model's accuracy for roughly half
+its mean cost. Forcing the cheap retry (`escalate-after 2`) cut escalation from ~42% to ~29% and
+raised the seed-0 saving from 37% to 47% versus escalating on the first miss.
 
-Two honest caveats, because the win is on **mean** cost and is not yet tight:
+Honest caveats:
 
-- **It over-escalates.** It escalated 10 of 24 tasks, but only **2** were truly beyond the cheap
-  model; the other 8 were solvable by claude-3-haiku given another attempt. Escalating after a
-  *single* cheap miss leaves most of the theoretical saving (toward ~60%) on the table. The clear
-  next lever is **one cheap retry before ESCALATE** when the cheap marginal cost is low.
+- **The cheap model sometimes reaches the ceiling on its own.** On seed 1, claude-3-haiku alone
+  solved 1.00 at $0.00039 — cheaper than the cascade. So the cascade's value is a **hedge**: it
+  reliably reaches the strong model's accuracy at below-strong cost *without knowing in advance*
+  whether the cheap model will get there. When the cheap model can, cheap-only is cheapest; the
+  cascade still beats always-using-the-strong-model.
+- **Mean cost, not tail.** The win is on average cost; an escalated task pays the cheap attempts
+  plus the strong call, so the cost tail is heavier than strong-only. A tail-aware (CVaR) objective
+  is future work.
 - **The escalation trigger here is a free exact grader, not a validated cheap verifier.** On this
   arithmetic suite a failed cheap attempt scores exactly 0, so "did the cheap model fail" is known
   for free. On a task without a free grader you would need a cheap verifier whose reliability is
