@@ -169,3 +169,23 @@ class BanditAllocator(Allocator):
         v = float(np.clip(value_per_cost_norm, 0.0, 1.0))
         self._alpha[action] += v
         self._beta[action] += (1.0 - v)
+
+
+class ConstantAllocator(Allocator):
+    """Always selects one fixed action -- the non-learned fixed-policy baselines
+    (always-WIDER / DEEPER / DECOMPOSE / ESCALATE / STOP).
+
+    The strongest of these is the bar a learned controller must clear: if
+    "always-DEEPER" ties the controller on a suite (overlapping Wilson CIs on
+    cost-per-solved), the controller added nothing *there*, and that is the honest
+    finding to report. The runner still masks unavailable actions (DECOMPOSE with
+    no planner, ESCALATE with no strong executor), so a constant for a masked
+    action falls back to the best available spend -- documented, not hidden.
+    `scores` is populated over every action so that mask-and-repick path works."""
+
+    def __init__(self, action: Action) -> None:
+        self.action = action
+
+    def decide(self, feats: NodeFeatures, currency: str, *, explore: bool = False) -> Decision:
+        scores = {a: (1.0 if a == self.action else 0.0) for a in Action}
+        return Decision(action=self.action, scores=scores)

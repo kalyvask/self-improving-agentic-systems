@@ -4,10 +4,12 @@ from wdp.allocator.policy import (
     Decision,
     Allocator,
     BanditAllocator,
+    ConstantAllocator,
 )
 from wdp.allocator.linear import LinearSoftmaxPolicy
 from wdp.allocator.bc import BCAllocator, ACTIONS
 from wdp.allocator.dpo import DPOAllocator
+from wdp.allocator.linucb import LinUCBAllocator
 
 __all__ = [
     "Action",
@@ -15,8 +17,10 @@ __all__ = [
     "Decision",
     "Allocator",
     "BanditAllocator",
+    "ConstantAllocator",
     "LinearSoftmaxPolicy",
     "BCAllocator",
     "DPOAllocator",
+    "LinUCBAllocator",
     "ACTIONS",
 ]
