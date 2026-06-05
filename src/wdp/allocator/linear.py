@@ -17,6 +17,9 @@ Both are plain numpy gradient descent. No sklearn, no torch, no GPU.
 """
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import numpy as np
 
 
@@ -284,3 +287,29 @@ class LinearSoftmaxPolicy:
             self.W -= self.lr * dW
             self.b -= self.lr * db
         self._fitted = True
+
+    # ---- persistence -----------------------------------------------------
+    def snapshot(self) -> dict:
+        """Full policy state: weights, bias, and the fitted feature scaler."""
+        return {
+            "W": self.W.tolist(), "b": self.b.tolist(),
+            "mu": self.mu.tolist(), "sigma": self.sigma.tolist(),
+            "fitted": self._fitted,
+        }
+
+    def restore(self, state: dict) -> None:
+        self.W = np.asarray(state["W"], dtype=np.float64)
+        self.b = np.asarray(state["b"], dtype=np.float64)
+        self.mu = np.asarray(state["mu"], dtype=np.float64)
+        self.sigma = np.asarray(state["sigma"], dtype=np.float64)
+        self._fitted = bool(state.get("fitted", True))
+
+    def save(self, path: str | Path) -> None:
+        """Persist a fitted policy so a BC/DPO/KTO allocator (whose learnable state
+        IS this policy) can be reloaded across runs without re-fitting."""
+        p = Path(path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(self.snapshot(), indent=2))
+
+    def load(self, path: str | Path) -> None:
+        self.restore(json.loads(Path(path).read_text()))

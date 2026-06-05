@@ -33,6 +33,9 @@ from v0 is "contextual vs average-case."
 """
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import numpy as np
 
 from wdp.allocator.policy import (
@@ -158,3 +161,14 @@ class LinUCBAllocator(Allocator):
             if a.value in state.get("A", {}):
                 self._A[a] = np.asarray(state["A"][a.value], dtype=np.float64)
                 self._b[a] = np.asarray(state["b"][a.value], dtype=np.float64)
+
+    def save(self, path: str | Path) -> None:
+        """Persist the learned per-arm A/b to disk so the policy keeps improving
+        session to session: deploy, update online from live rewards, save, reload
+        next run with the evidence intact."""
+        p = Path(path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(self.snapshot(), indent=2))
+
+    def load(self, path: str | Path) -> None:
+        self.restore(json.loads(Path(path).read_text()))

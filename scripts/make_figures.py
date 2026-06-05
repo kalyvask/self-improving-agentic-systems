@@ -290,7 +290,45 @@ def fig_cascade():
     fig.tight_layout(); fig.savefig(ART / "cascade_frontier.png", dpi=130); plt.close(fig)
 
 
+# ---- Figure: regret vs the best fixed arm (hindsight) ---------------------
+def fig_regret():
+    """Cumulative regret of the online policy vs the best FIXED arm in hindsight.
+
+    Oracle = the spend arm with the highest mean realized value-per-cost over the
+    whole stream; regret_t = sum_{s<=t} (mu_star - vpc_s). Sublinear (flattening)
+    regret means the online policy concentrates on the good arm instead of paying
+    the gap forever. Reads the per-decision value-per-cost stream from a collection
+    trace file; skips cleanly when none is present."""
+    spend = {"wider", "deeper", "decompose", "escalate"}
+    src = next((c for c in ("traces.jsonl", "calib_bc.jsonl", "calib_dpo.jsonl")
+                if (TR / c).exists()), None)
+    if src is None:
+        print("skip regret: no collection trace file"); return
+    stream = [(d.get("action"), float(d["value_per_cost"]))
+              for t in _read(src) for d in t.get("decisions", [])
+              if d.get("action") in spend and d.get("value_per_cost") is not None]
+    if len(stream) < 10:
+        print("skip regret: stream too short"); return
+    sums: dict[str, float] = {}
+    counts: dict[str, int] = {}
+    for a, v in stream:
+        sums[a] = sums.get(a, 0.0) + v
+        counts[a] = counts.get(a, 0) + 1
+    mu_star = max(s / counts[a] for a, s in sums.items())
+    regret = np.cumsum([mu_star - v for _, v in stream])
+    fig, ax = plt.subplots(figsize=(7, 4.4))
+    ax.plot(range(1, len(regret) + 1), regret, color="#4C72B0", lw=2, label="online policy")
+    ax.plot([1, len(regret)], [regret[-1] / len(regret), regret[-1]], ls=":", c="gray",
+            lw=1, label="linear (no learning)")
+    ax.set(title="Cumulative regret vs best fixed arm (hindsight)",
+           xlabel="decision", ylabel="cumulative regret (value-per-cost)")
+    ax.grid(alpha=0.3); ax.legend(loc="upper left")
+    fig.tight_layout(); fig.savefig(ART / "regret_vs_oracle.png", dpi=130); plt.close(fig)
+    print("wrote regret_vs_oracle.png")
+
+
 def main():
+    fig_regret()
     fig_cascade(); print("wrote cascade_frontier.png")
     fig_frontier(); print("wrote cost_solve_frontier.png")
     fig_curves(); print("wrote self_improvement_curves.png")

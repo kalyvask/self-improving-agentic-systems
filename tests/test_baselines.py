@@ -111,3 +111,46 @@ def test_linucb_snapshot_restore_roundtrip():
     s2 = a2.decide(nf, "dollars", explore=False).scores
     for a in BANDIT_ARMS:
         assert abs(s1[a] - s2[a]) < 1e-9
+
+
+def test_linucb_save_load_file_roundtrip(tmp_path):
+    """save() then load() into a fresh allocator reproduces the value estimates
+    (the 'keeps improving session to session' persistence story)."""
+    a1 = LinUCBAllocator(seed=0)
+    for _ in range(40):
+        nf = NodeFeatures(score_max=0.7, budget_remaining_frac=0.3)
+        d = a1.decide(nf, "dollars", explore=True)
+        a1.update(d.action, 0.8)
+    path = tmp_path / "linucb_state.json"
+    a1.save(path)
+    a2 = LinUCBAllocator(seed=0)
+    a2.load(path)
+    nf = NodeFeatures(score_max=0.6, budget_remaining_frac=0.4)
+    s1 = a1.decide(nf, "dollars", explore=False).scores
+    s2 = a2.decide(nf, "dollars", explore=False).scores
+    for a in BANDIT_ARMS:
+        assert abs(s1[a] - s2[a]) < 1e-9
+
+
+def test_linear_policy_save_load_roundtrip(tmp_path):
+    """A fitted BC/DPO/KTO core round-trips through save/load (so an allocator can
+    be reloaded across runs without re-fitting)."""
+    from wdp.allocator import BCAllocator, NodeFeatures as NF
+    from wdp.loop.trace import DecisionRecord, TaskTrace
+    rng = np.random.default_rng(2)
+    traces = []
+    for i in range(60):
+        nf = NF(score_max=rng.uniform(0, 1), budget_remaining_frac=rng.uniform(0, 1))
+        traces.append(TaskTrace(task_id=f"t{i}", currency="dollars", policy="gen", solved=True,
+                                decisions=[DecisionRecord(step=0, features=nf.vector().tolist(),
+                                                          action="deeper", value_per_cost=0.9)]))
+    bc = BCAllocator(keep_fraction=0.5, seed=0)
+    bc.fit(traces)
+    path = tmp_path / "bc_policy.json"
+    bc.policy.save(path)
+    bc2 = BCAllocator(keep_fraction=0.5, seed=0)
+    bc2.policy.load(path)
+    nf = NF(score_max=0.8, budget_remaining_frac=0.2)
+    p1 = bc.policy.probs(nf.vector())
+    p2 = bc2.policy.probs(nf.vector())
+    assert np.allclose(p1, p2)

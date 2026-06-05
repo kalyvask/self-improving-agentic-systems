@@ -69,6 +69,42 @@ GRPO is estimated, not run. The loop logs the per-call token and wall cost GRPO
 would need, so the GRPO cost and expected ceiling are an extrapolation from
 measured data rather than a guess.
 
+## Baselines and positioning
+
+A learned controller is only worth its complexity if it beats what you get without
+learning. Three baselines make that test explicit (`scripts/fixed_baselines.py`):
+
+- **Fixed-action policies** (`ConstantAllocator`): always-WIDER / DEEPER /
+  DECOMPOSE / ESCALATE / STOP. The strongest single fixed action is the bar to
+  clear; the script reports whether the learned controller *separates* from it
+  (Wilson CIs on solve, McNemar on paired solves, a paired bootstrap CI on cost)
+  and prints the honest null ("ties always-DEEPER at this n") when that is the
+  truth.
+- **Non-contextual online bandit** (`BanditAllocator`, v0): Thompson over
+  per-action value-per-cost, the round-0 cold start.
+- **Contextual online bandit** (`LinUCBAllocator`): disjoint LinUCB over the
+  *same* 12 features and actions the trained policies use, learned online with no
+  offline step. It asks the load-bearing question: *does offline BC -> DPO -> GRPO
+  actually beat a cheap online contextual bandit on the same features and
+  actions?* If it does, the offline machinery has earned its cost; if it ties,
+  that is the headline.
+
+**Offline vs online.** BC/DPO/KTO/GRPO are offline (fit once on accumulated
+traces, stable, need a trace corpus). The bandits are online (update per decision,
+adapt continually, no corpus). `LinUCBAllocator.fit()` warm-starts from logged
+traces and keeps updating, and `save()` / `load()` persist the learned state, so a
+deployed controller can keep improving session to session rather than being
+trained once.
+
+**Positioning.** This is a *learned, cost-aware policy at the compute-allocation
+layer* -- not a self-rewriting agent, and a contextual-bandit / offline-RL
+reduction rather than deep sequential RL (GRPO's group-relative advantage replaces
+a learned critic). The learning objectives are textbook; the contribution is the
+composition and the cost-per-solved objective. The full comparison against
+compute-optimal inference (Snell et al.), Thompson tree search (AB-MCTS),
+process-reward search, and inference-time routing, with the plain disclaimers, is
+in [`docs/POSITIONING.md`](docs/POSITIONING.md).
+
 ## Cost currencies
 
 Every LLM call is logged in three currencies at once, because the optimal
@@ -346,8 +382,10 @@ src/wdp/
   cost/                per-call cost accounting in three currencies
   llm/                 OpenRouter chat client with usage-based cost
   allocator/           the policy core and policies:
-                         policy.py  Action, NodeFeatures, BanditAllocator (v0)
-                         linear.py  shared CPU-trainable linear-softmax core
+                         policy.py  Action, NodeFeatures, BanditAllocator (v0),
+                                    ConstantAllocator (fixed-action baselines)
+                         linear.py  shared CPU-trainable linear-softmax core (+ save/load)
+                         linucb.py  LinUCBAllocator (online contextual-bandit baseline)
                          bc.py      BCAllocator (behavior cloning)
                          dpo.py     DPOAllocator (preference learning)
                          kto.py     KTOAllocator (unpaired preference learning)
