@@ -136,6 +136,9 @@ def main() -> None:
     ap.add_argument("--cache-mode", choices=["off", "readwrite", "replay"], default="off",
                     help="response cache: readwrite serves deterministic (temp=0) hits free; "
                          "replay reproduces a finished run; cost is billed from the cache on a hit")
+    ap.add_argument("--save-policy", default=None,
+                    help="after training, persist the deployable policy to this JSON path "
+                         "(load with serve_policy.py)")
     # tau-bench knobs.
     ap.add_argument("--env", default="retail", help="tau-bench domain: retail | airline")
     ap.add_argument("--tb-split", default="test", help="tau-bench task split: train | dev | test")
@@ -245,6 +248,19 @@ def main() -> None:
     print(f"\nself-improvement curve ({args.benchmark}/{args.learner}, "
           f"currency={args.currency}):\n")
     print(format_curve(reports))
+
+    # Persist the deployable policy: refit the learner on all accumulated training
+    # traces (what the final round saw) and save it for serve_policy.py. Offline.
+    if args.save_policy:
+        from wdp.allocator import BCAllocator, DPOAllocator, KTOAllocator
+        from wdp.allocator.persist import save_policy
+        cls = {"bc": BCAllocator, "dpo": DPOAllocator, "kto": KTOAllocator}[args.learner]
+        final = cls(keep_fraction=cfg["loop"]["bc_keep_fraction"], seed=args.seed)
+        final.fit(TraceLog(out).read())
+        save_policy(final, args.save_policy, meta={
+            "benchmark": args.benchmark, "learner": args.learner, "seed": args.seed,
+            "cost_weight": args.cost_weight, "rounds": args.rounds})
+        print(f"\nsaved deployable policy -> {args.save_policy}")
 
 
 if __name__ == "__main__":

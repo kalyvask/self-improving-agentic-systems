@@ -170,6 +170,20 @@ class BanditAllocator(Allocator):
         self._alpha[action] += v
         self._beta[action] += (1.0 - v)
 
+    # ---- persistence -----------------------------------------------------
+    def to_dict(self) -> dict:
+        return {"stop_threshold": self.stop_threshold,
+                "alpha": {a.value: float(self._alpha[a]) for a in self._alpha},
+                "beta": {a.value: float(self._beta[a]) for a in self._beta}}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "BanditAllocator":
+        b = cls(stop_threshold=float(d.get("stop_threshold", 0.02)))
+        for a in b._alpha:                      # only restore arms the current code has
+            b._alpha[a] = float(d.get("alpha", {}).get(a.value, b._alpha[a]))
+            b._beta[a] = float(d.get("beta", {}).get(a.value, b._beta[a]))
+        return b
+
 
 class ConstantAllocator(Allocator):
     """Always selects one fixed action -- the non-learned fixed-policy baselines

@@ -74,6 +74,26 @@ class LinearSoftmaxPolicy:
     def _scale(self, X: np.ndarray) -> np.ndarray:
         return (X - self.mu) / self.sigma
 
+    # ---- persistence -----------------------------------------------------
+    def to_dict(self) -> dict:
+        """JSON-friendly snapshot of the fitted policy (weights + scaler)."""
+        return {
+            "n_features": self.n_features, "n_actions": self.n_actions,
+            "W": self.W.tolist(), "b": self.b.tolist(),
+            "mu": self.mu.tolist(), "sigma": self.sigma.tolist(),
+            "fitted": bool(self._fitted),
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "LinearSoftmaxPolicy":
+        p = cls(n_features=int(d["n_features"]), n_actions=int(d["n_actions"]))
+        p.W = np.asarray(d["W"], dtype=float)
+        p.b = np.asarray(d["b"], dtype=float)
+        p.mu = np.asarray(d["mu"], dtype=float)
+        p.sigma = np.asarray(d["sigma"], dtype=float)
+        p._fitted = bool(d.get("fitted", True))
+        return p
+
     # ---- inference -------------------------------------------------------
     def logits(self, X: np.ndarray) -> np.ndarray:
         return self._scale(np.atleast_2d(X)) @ self.W.T + self.b
