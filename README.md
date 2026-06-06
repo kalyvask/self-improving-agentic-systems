@@ -29,9 +29,9 @@ Three live results, reported with their honest verdicts:
    schema-grounded DECOMPOSE (**5–6/8 across two seeds**) by round 2, at *lower* cost,
    graded by free execution-match.
 2. **Weak->strong cascade (the resolved cost win):** a cheap model that retries once then
-   escalates only what it still fails reaches a stronger model's solve rate at **36-47%
-   lower mean cost across two seeds**, beating always-use-the-strong-model with a
-   paired-cost CI that excludes zero.
+   escalates only what it still fails reaches a stronger model's solve rate at **42%
+   lower mean cost** (n=48 paired across two seeds), beating always-use-the-strong-model
+   with a paired-cost CI that excludes zero.
 3. **Single-model allocation (honest tie):** the learned policy is ~40% cheaper than the
    *exploring cold-start bandit* it begins from, but at this sample size it **ties the best
    fixed action** — a real self-improvement gain, not a win over the best hand-picked
@@ -234,7 +234,7 @@ runs all of this offline on collected traces.
 | result | benchmark | headline | resolved? |
 |--------|-----------|----------|-----------|
 | Self-improvement learns the right action | real text-to-SQL (free exec-match) | cold-start 0–2/8 → **5–6/8** eval solve (2 seeds), WIDER→DECOMPOSE, lower cost | directional (n=8/seed) |
-| Weak→strong cascade | arithmetic (2 seeds) | matches strong-model solve at **36–47% lower mean cost**; beats always-strong | **yes** (paired CI excludes 0) |
+| Weak→strong cascade | arithmetic (2 seeds, n=48 pooled) | matches strong-model solve (48/48=48/48) at **42% lower mean cost**; beats always-strong | **yes** (paired CI −0.001 [−0.001,−0.000]) |
 | Single-model allocation | calibrated arithmetic | ~40% cheaper than the exploring cold-start; **ties** the best fixed action | tie at n=44 |
 
 The three are described in turn; the honest boundaries (where it does *not* work) are collected in
@@ -340,8 +340,9 @@ Two findings, both from measurement catching a wrong default:
    always-escalate is genuinely near-optimal — the policy was right). claude-3-haiku at ~0.88 does.
 
 With the rescue gate, a cheap retry before escalating (`--escalate-after 2`), and a calibrated
-budget, the learned cascade **matches Haiku-4.5's solve rate at 36–47% lower MEAN cost across two
-seeds**, escalating only ~29–38% of tasks:
+budget, the learned cascade **matches Haiku-4.5's solve rate at ~42% lower MEAN cost** — pooled over
+both seeds (n=48 paired): solve 48/48 vs 48/48, mean $0.00071 vs $0.00122, paired delta
+**−0.001 [−0.001, −0.000]** (per-seed it was 47% / 36%) — escalating only ~29–38% of tasks:
 
 ![Weak→strong cascade frontier](artifacts/cascade_frontier.png)
 
