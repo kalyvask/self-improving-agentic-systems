@@ -21,13 +21,27 @@ agents run and the more they pay per token. So the controller is judged on **cos
 solved task**, not accuracy alone, with a measurement-rigor layer (Wilson and bootstrap
 confidence intervals, McNemar, Rasch task difficulty, an alternative-annotator test on
 the cheap verifier, and an oracle-rescue diagnostic that classifies every miss) so each
-cost and solve-rate claim is resolved, not eyeballed. Two results on a calibrated
-arithmetic suite, both with paired-cost intervals that exclude zero: the learned DPO
-policy matches a cold-start baseline's solve rate at roughly half the cost (by
-decomposing multi-part tasks and abstaining on hopeless ones); and a learned weak->strong
-cascade (a cheap model that retries once, then escalates only the tasks it still fails)
-reaches a stronger model's solve rate at 36-47% lower mean cost across two seeds while
-escalating under 40% of tasks.
+cost and solve-rate claim is resolved, not eyeballed.
+
+Three live results, reported with their honest verdicts:
+1. **Real text-to-SQL (the clearest one):** the loop learns an interpretable allocation
+   strategy from its own traces — it flips from writing SQL cold (0/8 solved) to
+   schema-grounded DECOMPOSE (6/8) by round 2, at *lower* cost, graded by free
+   execution-match.
+2. **Weak->strong cascade (the resolved cost win):** a cheap model that retries once then
+   escalates only what it still fails reaches a stronger model's solve rate at **36-47%
+   lower mean cost across two seeds**, beating always-use-the-strong-model with a
+   paired-cost CI that excludes zero.
+3. **Single-model allocation (honest tie):** the learned policy is ~40% cheaper than the
+   *exploring cold-start bandit* it begins from, but at this sample size it **ties the best
+   fixed action** — a real self-improvement gain, not a win over the best hand-picked
+   strategy. It is the *top* policy by solve where allocation genuinely matters, just not
+   resolvably so.
+
+And the boundaries we measured rather than hid: the cascade only saves cost when the cheap
+model is capable enough (it does not on tau-bench retail); arithmetic with a calculator has
+no capability ceiling; and a small agent eval is usually underpowered, so cost (paired) is
+the metric we lean on, not solve.
 
 The controller (the Allocator) is a small, CPU-trainable policy over cheap numeric
 features, not a fine-tuned LLM. Executors are frontier models called through
@@ -192,7 +206,20 @@ runs all of this offline on collected traces.
 
 ## Results
 
-**Headline: self-improvement cuts cost without giving up accuracy.** The point of learning from
+**At a glance** (each result detailed below, with the bar it clears):
+
+| result | benchmark | headline | resolved? |
+|--------|-----------|----------|-----------|
+| Self-improvement learns the right action | real text-to-SQL (free exec-match) | 0/8 → **6/8** eval solve, WIDER→DECOMPOSE, lower cost | directional (n=8) |
+| Weak→strong cascade | arithmetic (2 seeds) | matches strong-model solve at **36–47% lower mean cost**; beats always-strong | **yes** (paired CI excludes 0) |
+| Single-model allocation | calibrated arithmetic | ~40% cheaper than the exploring cold-start; **ties** the best fixed action | tie at n=44 |
+
+The three are described in turn; the honest boundaries (where it does *not* work) are collected in
+[What we learned](#what-we-learned-and-where-it-does-not-work) at the end.
+
+### Single-model allocation vs the cold-start baseline
+
+**Self-improvement cuts cost without giving up accuracy.** The point of learning from
 the agent's own traces here is to hold the solve rate while spending less, and that is what
 happens. On the calibrated arithmetic suite (110 tasks, 44-task eval), after fixing a family of
 credit/normalization/execution bugs and adding an abstention (STOP) rule calibrated to abstain
@@ -376,7 +403,30 @@ store. Caveats: n=8 eval is small (wide Wilson interval) and execution-match is 
 single-seed demonstration that learning shifted the policy to the right action on a real task, not a
 powered benchmark number.
 
+### What we learned (and where it does not work)
+
+The boundaries are part of the result; surfacing them is what makes the wins credible.
+
+- **Beat-the-best-fixed-action is the load-bearing bar.** A self-improvement curve only proves you
+  beat the cold start you began with. The harder, honest question — does learning beat the best
+  strategy you could pick *without* it — ties at the sample sizes here. We ran it
+  (`scripts/fixed_baselines.py`) rather than leave it implied.
+- **A cascade only saves cost when the cheap model is capable enough.** claude-3-haiku carries real
+  load on arithmetic (→ 36–47% saving); an 8B model does not (its retry cost ≈ one strong call), and
+  claude-3-haiku on tau-bench retail does not (it escalates ~everything, so the cascade ≈ strong-only).
+- **Allocation only matters where the action choice changes the outcome.** On a calculator-equipped
+  arithmetic suite one attempt solves most tasks, so every action ties and no learner can separate —
+  a benchmark ceiling, not a controller failure. Text-to-SQL is the opposite: WIDER solves nothing,
+  DECOMPOSE solves most, and the controller learns the difference.
+- **Cost wins are on the mean; watch the tail.** Selective escalation lowers mean cost but can raise
+  p95 (an escalated task pays cheap + strong). Both are reported.
+- **Small agent evals are underpowered.** At n≈8–44 the minimum detectable solve difference is large,
+  so cost (continuous, paired, low-variance) is the metric leaned on and solve is read with its
+  interval, not as a point.
+
 ---
+
+### Appendix: earlier history
 
 Earlier powered sweep (pre-STOP-rule), 110 tasks (66 train / 44 eval), budget calibrated to
 ~2x the median task cost so the cost signal is active. Round 3 (final) eval:
