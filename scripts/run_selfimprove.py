@@ -23,7 +23,7 @@ from wdp.executor.react import Executor
 from wdp.planner.decompose import Planner
 from wdp.verifier.scorer import LLMProcessVerifier
 from wdp.allocator import BanditAllocator  # noqa: F401  (referenced in docs)
-from wdp.benchmarks import ArithmeticBenchmark, split
+from wdp.benchmarks import ArithmeticBenchmark, SqlBenchmark, split
 from wdp.loop import RunConfig, TraceLog, self_improve, format_curve
 
 
@@ -50,6 +50,23 @@ def _build_arithmetic(args, cfg, client):
                         temperature=cfg["executor"]["temperature"])
     planner = Planner(client, exec_model)
     print(f"arithmetic executor model: {exec_model}")
+    return bench, train, eval_, executor, planner
+
+
+def _build_sql(args, cfg, client):
+    """Single-db text-to-SQL suite: real task, FREE execution-match reward, clean
+    cost ledger (SQL runs locally). DECOMPOSE = explore schema then compose."""
+    import json
+    models = cfg["models"]
+    specs = json.loads(Path(args.sql_tasks).read_text(encoding="utf-8"))
+    bench = SqlBenchmark(args.sql_db, specs, seed=args.seed)
+    train, eval_ = split(bench.tasks(), frac_train=args.frac_train, seed=args.seed)
+    exec_model = args.cheap_model or models["cheap"]
+    executor = Executor(client, exec_model, tools=bench.tools(),
+                        max_steps=cfg["executor"]["max_steps"],
+                        temperature=cfg["executor"]["temperature"])
+    planner = Planner(client, exec_model)
+    print(f"sql executor model: {exec_model} | db: {args.sql_db}")
     return bench, train, eval_, executor, planner
 
 
@@ -92,7 +109,10 @@ def _build_taubench(args, cfg, client):
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--benchmark", choices=["arithmetic", "taubench"], default="arithmetic")
+    ap.add_argument("--benchmark", choices=["arithmetic", "taubench", "sql"], default="arithmetic")
+    ap.add_argument("--sql-db", default=None, help="path to the SQLite db for --benchmark sql")
+    ap.add_argument("--sql-tasks", default=None,
+                    help="JSON list of {question, gold_sql, difficulty} for --benchmark sql")
     ap.add_argument("--learner", choices=["bc", "dpo", "kto"], default="bc")
     ap.add_argument("--rounds", type=int, default=3)
     ap.add_argument("--currency", choices=["tokens", "latency", "dollars"], default="dollars")
@@ -190,6 +210,8 @@ def main() -> None:
     with OpenRouterClient(cache=cache) as client:
         if args.benchmark == "taubench":
             bench, train, eval_, executor, planner = _build_taubench(args, cfg, client)
+        elif args.benchmark == "sql":
+            bench, train, eval_, executor, planner = _build_sql(args, cfg, client)
         else:
             bench, train, eval_, executor, planner = _build_arithmetic(args, cfg, client)
 

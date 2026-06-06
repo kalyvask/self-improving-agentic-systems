@@ -5,6 +5,7 @@ from wdp.benchmarks.arithmetic import (
     safe_eval,
     split,
 )
+from wdp.benchmarks.sql import SqlBenchmark, SqlVerifier
 
 __all__ = [
     "Benchmark",
@@ -12,6 +13,8 @@ __all__ = [
     "ArithmeticVerifier",
     "safe_eval",
     "split",
+    "SqlBenchmark",
+    "SqlVerifier",
 ]
 
 # tau-bench is an optional heavy dependency. Only export the adapter if it is
