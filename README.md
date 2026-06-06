@@ -353,6 +353,29 @@ tau, including a true mid-conversation handoff (the strong model resumes the che
 rather than restarting). Caveats: small eval (n=8, stochastic user simulator, so this is
 directional not powered); **agent cost only** (the user-simulator's LLM turns run off-ledger).
 
+#### Self-improvement on real text-to-SQL (a free, deterministic grader)
+
+The cleanest "did learning change behaviour on a real task" demonstration. The SQL benchmark
+(`--benchmark sql`) is a natural-language-question → SQL suite over a small e-commerce database,
+graded by **execution match** (run the predicted and gold SQL, compare result sets) — a free,
+deterministic reward, and the agent's only billable calls are its own (the SQL runs locally, so the
+cost ledger is clean). Running the self-improvement loop (Haiku-4.5, 20 questions, 8-task held-out
+eval):
+
+| round | policy | eval solve | mean cost | what it does |
+|-------|--------|------------|-----------|--------------|
+| 0 | bandit | 0/8 | $0.0145 | all WIDER (write SQL cold) |
+| 1 | dpo | 0/8 | $0.0142 | still mostly WIDER |
+| 2 | dpo | **6/8** | **$0.0113** | **all DECOMPOSE** (explore schema, then compose) |
+
+The controller **learns an interpretable allocation lesson from its own traces**: writing SQL cold
+(WIDER) solves nothing here, so by round 2 it flips to DECOMPOSE — ground the query in the schema
+first — reaching 6/8 *and* spending less. The learned policy is genuinely deployable: `--save-policy`
+writes it and `serve_policy.py` loads it frozen and returns `decompose` with no training or trace
+store. Caveats: n=8 eval is small (wide Wilson interval) and execution-match is strict; this is a
+single-seed demonstration that learning shifted the policy to the right action on a real task, not a
+powered benchmark number.
+
 ---
 
 Earlier powered sweep (pre-STOP-rule), 110 tasks (66 train / 44 eval), budget calibrated to

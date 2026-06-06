@@ -274,7 +274,9 @@ def main() -> None:
     # Persist the deployable policy: refit the learner on all accumulated training
     # traces (what the final round saw) and save it for serve_policy.py. Offline.
     if args.save_policy:
-        from wdp.allocator import BCAllocator, DPOAllocator, KTOAllocator
+        from wdp.allocator.bc import BCAllocator
+        from wdp.allocator.dpo import DPOAllocator
+        from wdp.allocator.kto import KTOAllocator
         from wdp.allocator.persist import save_policy
         cls = {"bc": BCAllocator, "dpo": DPOAllocator, "kto": KTOAllocator}[args.learner]
         final = cls(keep_fraction=cfg["loop"]["bc_keep_fraction"], seed=args.seed)
