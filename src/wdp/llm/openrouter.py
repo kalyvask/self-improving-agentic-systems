@@ -33,12 +33,13 @@ class OpenRouterClient:
     """Thin synchronous client. One instance can be shared across executors;
     pass a per-task CostLedger to ``chat`` so spend is attributed correctly."""
 
-    def __init__(self, timeout: float = 120.0) -> None:
+    def __init__(self, timeout: float = 120.0, cache=None) -> None:
         load_env()
         self._key = require_openrouter_key()
         self._app_url = os.environ.get("OPENROUTER_APP_URL", "")
         self._app_title = os.environ.get("OPENROUTER_APP_TITLE", "wdp-controller")
         self._client = httpx.Client(timeout=timeout)
+        self._cache = cache              # optional ResponseCache; None = disabled
 
     def _headers(self) -> dict[str, str]:
         h = {"Authorization": f"Bearer {self._key}", "Content-Type": "application/json"}
@@ -70,6 +71,23 @@ class OpenRouterClient:
             payload["max_tokens"] = max_tokens
         payload.update(kwargs)
 
+        # Cache lookup. A hit bills the STORED cost into the ledger (so cost/solve
+        # numbers stay identical to a fresh run) but skips the live call entirely.
+        ckey = None
+        if self._cache is not None:
+            ckey = self._cache.key(model, messages, temperature, max_tokens, kwargs or None)
+            if self._cache.should_serve(temperature):
+                hit = self._cache.get(ckey)
+                if hit is not None:
+                    spend = Spend(
+                        model=hit["model"], prompt_tokens=hit["prompt_tokens"],
+                        completion_tokens=hit["completion_tokens"], wall_seconds=hit["wall"],
+                        dollars=hit["dollars"], parallel_group=parallel_group)
+                    if ledger is not None:
+                        ledger.add(spend)
+                    return LLMResponse(text=hit["text"], model=model, spend=spend,
+                                       raw={"cached": True})
+
         t0 = time.perf_counter()
         resp = self._client.post(BASE_URL, headers=self._headers(), json=payload)
         wall = time.perf_counter() - t0
@@ -86,6 +104,11 @@ class OpenRouterClient:
             dollars=float(usage.get("cost", 0.0)),
             parallel_group=parallel_group,
         )
+        if self._cache is not None and ckey is not None:
+            self._cache.put(ckey, model=model, text=text,
+                            prompt_tokens=spend.prompt_tokens,
+                            completion_tokens=spend.completion_tokens,
+                            dollars=spend.dollars, wall=wall)
         if ledger is not None:
             ledger.add(spend)
         return LLMResponse(text=text, model=model, spend=spend, raw=data)

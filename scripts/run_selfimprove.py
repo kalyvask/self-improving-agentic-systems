@@ -133,6 +133,9 @@ def main() -> None:
     ap.add_argument("--escalate-after", type=int, default=1,
                     help="cheap attempts required before ESCALATE is allowed (1=after one miss; "
                          "2=force a cheap retry first, cutting over-escalation)")
+    ap.add_argument("--cache-mode", choices=["off", "readwrite", "replay"], default="off",
+                    help="response cache: readwrite serves deterministic (temp=0) hits free; "
+                         "replay reproduces a finished run; cost is billed from the cache on a hit")
     # tau-bench knobs.
     ap.add_argument("--env", default="retail", help="tau-bench domain: retail | airline")
     ap.add_argument("--tb-split", default="test", help="tau-bench task split: train | dev | test")
@@ -175,7 +178,13 @@ def main() -> None:
         Path(p).unlink(missing_ok=True)
     trace_log = TraceLog(out)
 
-    with OpenRouterClient() as client:
+    cache = None
+    if args.cache_mode != "off":
+        from wdp.llm.cache import ResponseCache
+        cache = ResponseCache(cfg.get("paths", {}).get("cache", "cache/responses.sqlite"),
+                              mode=args.cache_mode)
+        print(f"response cache: {args.cache_mode}")
+    with OpenRouterClient(cache=cache) as client:
         if args.benchmark == "taubench":
             bench, train, eval_, executor, planner = _build_taubench(args, cfg, client)
         else:
