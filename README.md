@@ -1,5 +1,7 @@
 # self-improving-agentic-systems (wdp-controller)
 
+[![tests](https://github.com/kalyvask/self-improving-agentic-systems/actions/workflows/ci.yml/badge.svg)](https://github.com/kalyvask/self-improving-agentic-systems/actions/workflows/ci.yml)
+
 A self-improving controller that decides how to spend the next unit of compute on
 a tool-using agent task. At each decision node it picks one of four core actions:
 
