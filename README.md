@@ -194,8 +194,9 @@ runs all of this offline on collected traces.
 the agent's own traces here is to hold the solve rate while spending less, and that is what
 happens. On the calibrated arithmetic suite (110 tasks, 44-task eval), after fixing a family of
 credit/normalization/execution bugs and adding an abstention (STOP) rule calibrated to abstain
-after 3 failed attempts, the learned DPO policy sits at **~$0.0018/task vs the cold-start bandit's
-~$0.0030 — about 40% cheaper — at the same 0.84 solve rate**. Accuracy is not the thing that
+after 3 failed attempts, the learned DPO policy sits at **~$0.0018/task vs the cold-start *exploring*
+bandit's ~$0.0030 — about 40% cheaper — at the same 0.84 solve rate** (the bandit it begins from
+spends more because it samples expensive actions to explore). Accuracy is not the thing that
 moves: paired solve is **0.841 vs 0.841**, statistically tied (McNemar p=1.0, neither side wins a
 single task net), while the paired per-task cost delta is **−0.001 [−0.002, −0.001] (95% bootstrap
 CI excludes 0 → resolved)**. Cost is the metric with power at n=44; the learned policy spends it
@@ -205,6 +206,31 @@ better, with a balanced WIDER/DEEPER/DECOMPOSE/STOP mix.
 *Mean cost (x) vs solve rate (y), greedy eval. The learned DPO policy sits directly left of the
 cold-start bandit at the same solve height — cheaper for the same outcome. Solve-rate error bars
 are wide (Wilson, n=44); the resolved signal is on cost (paired), not solve.*
+
+**The harder bar: does it beat the best FIXED action?** Beating the cold-start you began with is the
+self-improvement curve; the sharper question is whether the learned policy beats the best strategy
+you could pick *without learning at all*. Running every fixed action (always-WIDER / -DEEPER /
+-DECOMPOSE / -STOP) plus the settled bandit and an online contextual LinUCB on the same held-out 44
+tasks (`scripts/fixed_baselines.py --benchmark arithmetic`):
+
+| policy | solve | mean cost | cost/solved |
+|--------|-------|-----------|-------------|
+| always-DECOMPOSE (best fixed) | 37/44 | $0.00191 | $0.00165 |
+| always-DEEPER | 36/44 | $0.00185 | $0.00153 |
+| always-WIDER | 36/44 | $0.00190 | $0.00159 |
+| settled bandit | 36/44 | $0.00176 | $0.00143 |
+| **learned DPO** | **36/44** | **$0.00171** | $0.00154 |
+| always-STOP | 0/44 | $0 | inf |
+
+**The learned controller does NOT separate from the best fixed action at n=44** — solve 36 vs 37
+(McNemar p=1.0), and the paired cost delta straddles zero. DPO has the lowest *mean* cost of any
+policy, but not resolvably so. Two honest reasons, both real: on this suite one attempt solves most
+tasks, so the spend-actions are nearly interchangeable (all 36–37/44) and the allocation headroom is
+thin; and n=44 is underpowered (see `metrics.reliability.tasks_needed`). So the ~40% above is a
+genuine gain *over the exploring cold-start*, not evidence that learning beats the best hand-picked
+fixed strategy — on this suite it **ties** it. The one place a learned policy *does* clear a fixed
+bar is the cascade below: it beats always-use-the-strong-model with a paired-cost CI that excludes
+zero.
 
 To be precise about what "same accuracy" means: the learned policy and the cold-start baseline
 are compared head-to-head on the identical 44 tasks, and neither solves more than the other
