@@ -1,0 +1,102 @@
+[
+  {
+    "difficulty": "simple",
+    "question": "How many customers are there?",
+    "gold_sql": "SELECT count(*) FROM customers"
+  },
+  {
+    "difficulty": "simple",
+    "question": "How many products are in the 'books' category?",
+    "gold_sql": "SELECT count(*) FROM products WHERE category='books'"
+  },
+  {
+    "difficulty": "simple",
+    "question": "List the names of customers in London.",
+    "gold_sql": "SELECT name FROM customers WHERE city='London'"
+  },
+  {
+    "difficulty": "simple",
+    "question": "How many orders have status 'cancelled'?",
+    "gold_sql": "SELECT count(*) FROM orders WHERE status='cancelled'"
+  },
+  {
+    "difficulty": "simple",
+    "question": "What is the most expensive product price?",
+    "gold_sql": "SELECT max(price) FROM products"
+  },
+  {
+    "difficulty": "simple",
+    "question": "How many distinct cities do customers come from?",
+    "gold_sql": "SELECT count(DISTINCT city) FROM customers"
+  },
+  {
+    "difficulty": "simple",
+    "question": "List product names that cost more than 20.",
+    "gold_sql": "SELECT name FROM products WHERE price>20"
+  },
+  {
+    "difficulty": "simple",
+    "question": "How many products are there per category? Return category and the count.",
+    "gold_sql": "SELECT category, count(*) FROM products GROUP BY category"
+  },
+  {
+    "difficulty": "moderate",
+    "question": "How many orders did each customer place? Return customer name and order count, for customers who placed at least one order.",
+    "gold_sql": "SELECT c.name, count(*) FROM customers c JOIN orders o ON o.customer_id=c.id GROUP BY c.id"
+  },
+  {
+    "difficulty": "moderate",
+    "question": "What is the total quantity sold per product? Return product name and total quantity.",
+    "gold_sql": "SELECT p.name, sum(i.quantity) FROM products p JOIN order_items i ON i.product_id=p.id GROUP BY p.id"
+  },
+  {
+    "difficulty": "moderate",
+    "question": "How many orders are there for each status?",
+    "gold_sql": "SELECT status, count(*) FROM orders GROUP BY status"
+  },
+  {
+    "difficulty": "moderate",
+    "question": "What is the average product price per category? Return category and average price.",
+    "gold_sql": "SELECT category, avg(price) FROM products GROUP BY category"
+  },
+  {
+    "difficulty": "moderate",
+    "question": "Which city has the most customers? Return the city and the count.",
+    "gold_sql": "SELECT city, count(*) FROM customers GROUP BY city ORDER BY count(*) DESC LIMIT 1"
+  },
+  {
+    "difficulty": "moderate",
+    "question": "How many order items belong to delivered orders?",
+    "gold_sql": "SELECT count(*) FROM order_items i JOIN orders o ON o.id=i.order_id WHERE o.status='delivered'"
+  },
+  {
+    "difficulty": "challenging",
+    "question": "Which product generated the most revenue (sum of quantity times price)? Return the product name.",
+    "gold_sql": "SELECT p.name FROM products p JOIN order_items i ON i.product_id=p.id GROUP BY p.id ORDER BY sum(i.quantity*p.price) DESC LIMIT 1"
+  },
+  {
+    "difficulty": "challenging",
+    "question": "Which customer spent the most in total (sum of quantity times price across their order items)? Return the customer name.",
+    "gold_sql": "SELECT c.name FROM customers c JOIN orders o ON o.customer_id=c.id JOIN order_items i ON i.order_id=o.id JOIN products p ON p.id=i.product_id GROUP BY c.id ORDER BY sum(i.quantity*p.price) DESC LIMIT 1"
+  },
+  {
+    "difficulty": "challenging",
+    "question": "List the names of products that were never ordered.",
+    "gold_sql": "SELECT name FROM products WHERE id NOT IN (SELECT DISTINCT product_id FROM order_items)"
+  },
+  {
+    "difficulty": "challenging",
+    "question": "List the names of customers who never placed an order.",
+    "gold_sql": "SELECT name FROM customers WHERE id NOT IN (SELECT DISTINCT customer_id FROM orders)"
+  },
+  {
+    "difficulty": "challenging",
+    "question": "Total revenue (sum of quantity times price) per category, ordered by revenue descending. Return category and revenue.",
+    "gold_sql": "SELECT p.category, sum(i.quantity*p.price) FROM products p JOIN order_items i ON i.product_id=p.id GROUP BY p.category ORDER BY sum(i.quantity*p.price) DESC"
+  },
+  {
+    "difficulty": "challenging",
+    "question": "Which customers placed more than 3 orders? Return the customer name and order count.",
+    "gold_sql": "SELECT c.name, count(*) FROM customers c JOIN orders o ON o.customer_id=c.id GROUP BY c.id HAVING count(*)>3"
+  }
+]
