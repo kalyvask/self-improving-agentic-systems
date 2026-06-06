@@ -42,7 +42,11 @@ from wdp.allocator import (
     DPOAllocator,
     LinUCBAllocator,
 )
-from wdp.benchmarks import TauBenchBenchmark, TauReActExecutor
+from wdp.benchmarks import (
+    ArithmeticBenchmark, TauBenchBenchmark, TauReActExecutor, split,
+)
+from wdp.executor.react import Executor
+from wdp.planner.decompose import Planner
 from wdp.loop import RunConfig, TraceLog
 from wdp.loop.runner import run_task, _maybe_update
 from wdp.metrics.reliability import mcnemar, paired_diff_ci, wilson_ci
@@ -70,11 +74,22 @@ def _cost(trace, currency: str) -> float:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--traces", required=True, help="trace file from a prior run")
+    ap.add_argument("--benchmark", choices=["taubench", "arithmetic"], default="taubench")
     ap.add_argument("--env", default="retail")
     ap.add_argument("--tb-split", default="test")
     ap.add_argument("--eval-start", type=int, default=12,
                     help="first task index of the fresh eval split (past training indices)")
     ap.add_argument("--n-eval", type=int, default=15)
+    # arithmetic eval-set composition (rebuilt + split the same way the sweep did, so
+    # the eval split is the held-out one the learned policy never trained on):
+    ap.add_argument("--atomic", type=int, default=60)
+    ap.add_argument("--multi", type=int, default=40)
+    ap.add_argument("--underspecified", type=int, default=10)
+    ap.add_argument("--hard", type=int, default=0)
+    ap.add_argument("--no-calc", action="store_true")
+    ap.add_argument("--frac-train", type=float, default=0.6)
+    ap.add_argument("--cheap-model", default=None,
+                    help="arithmetic executor/planner model override (OpenRouter slug)")
     ap.add_argument("--currency", choices=["tokens", "latency", "dollars"], default="dollars")
     ap.add_argument("--budget", type=float, default=0.20)
     ap.add_argument("--max-decisions", type=int, default=4)
@@ -110,32 +125,51 @@ def main() -> None:
     linucb.fit(accumulated)
     bandit = _replay_bandit(accumulated, args.seed)
 
-    policies: dict[str, object] = {
-        "always-wider": ConstantAllocator(Action.WIDER),
-        "always-deeper": ConstantAllocator(Action.DEEPER),
-        "always-stop": ConstantAllocator(Action.STOP),
-        "bandit": bandit,
-        "linucb": linucb,
-        args.learner: learned,
-    }
-
-    indices = list(range(args.eval_start, args.eval_start + args.n_eval))
-    bench = TauBenchBenchmark(env_name=args.env, split=args.tb_split, task_indices=indices)
-    eval_tasks = bench.tasks()
-    terminal = bench.terminal_verifier()
-
     with OpenRouterClient() as client:
-        executor = TauReActExecutor(
-            client=client, model=args.agent_model or models["executor"],
-            env_name=args.env, split=args.tb_split,
-            user_model=args.user_model, user_provider=args.user_provider,
-            max_steps=cfg["executor"]["max_steps"], temperature=cfg["executor"]["temperature"],
-        )
+        # Build the eval split, executor, planner, and terminal verifier per benchmark.
+        # ARITHMETIC is the credibility benchmark for this test (a real, resolved cost
+        # win there); a planner is wired so always-DECOMPOSE is a fair fixed baseline.
+        if args.benchmark == "arithmetic":
+            bench = ArithmeticBenchmark(
+                n_atomic=args.atomic, n_multi=args.multi, n_underspecified=args.underspecified,
+                n_hard=args.hard, no_calc=args.no_calc, seed=args.seed)
+            _, eval_tasks = split(bench.tasks(), frac_train=args.frac_train, seed=args.seed)
+            exec_model = args.cheap_model or models["cheap"]
+            executor = Executor(client, exec_model, tools=bench.tools(),
+                                max_steps=cfg["executor"]["max_steps"],
+                                temperature=cfg["executor"]["temperature"])
+            planner = Planner(client, exec_model)
+            label = f"arithmetic | {len(eval_tasks)} held-out eval tasks"
+        else:
+            indices = list(range(args.eval_start, args.eval_start + args.n_eval))
+            bench = TauBenchBenchmark(env_name=args.env, split=args.tb_split, task_indices=indices)
+            eval_tasks = bench.tasks()
+            executor = TauReActExecutor(
+                client=client, model=args.agent_model or models["executor"],
+                env_name=args.env, split=args.tb_split,
+                user_model=args.user_model, user_provider=args.user_provider,
+                max_steps=cfg["executor"]["max_steps"], temperature=cfg["executor"]["temperature"],
+            )
+            planner = None
+            label = (f"{args.env}/{args.tb_split} | {len(eval_tasks)} held-out tasks "
+                     f"(idx {indices[0]}..{indices[-1]})")
+        terminal = bench.terminal_verifier()
+
+        # Fixed-action baselines + the learners. DECOMPOSE is a real fixed baseline only
+        # when a planner is wired (arithmetic); on tau it is masked to WIDER, so omit it.
+        policies: dict[str, object] = {
+            "always-wider": ConstantAllocator(Action.WIDER),
+            "always-deeper": ConstantAllocator(Action.DEEPER),
+            "always-stop": ConstantAllocator(Action.STOP),
+        }
+        if planner is not None:
+            policies["always-decompose"] = ConstantAllocator(Action.DECOMPOSE)
+        policies.update({"bandit": bandit, "linucb": linucb, args.learner: learned})
+
         verifier = LLMProcessVerifier(client, models["scorer"])
         trace_log = TraceLog(args.out)
 
-        print(f"fixed-baseline eval on {args.env}/{args.tb_split} | "
-              f"{len(eval_tasks)} held-out tasks (idx {indices[0]}..{indices[-1]})")
+        print(f"fixed-baseline eval on {label}")
         print(f"fit/replay from {len(accumulated)} accumulated traces\n")
 
         # Interleave per task (all policies on the same task) so a mid-run credit
