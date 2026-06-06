@@ -11,6 +11,7 @@
 | | per-step compute allocation | cost in the objective | learns from own traces | off-the-shelf model (no retrain) |
 |---|:---:|:---:|:---:|:---:|
 | **This controller** | yes | yes | yes | yes |
+| Learned workflow / strategy selection (per task) | no (one whole pipeline per task) | typically no (accuracy) | yes | yes |
 | Compute-optimal inference (Snell et al. 2024) | yes (parallel/sequential split) | partial (compute-aware, fixed rule) | no (analysis, not a learned policy) | yes |
 | Thompson-sampling tree search (AB-MCTS) | yes (wider/deeper) | no (samples, not cost) | no (search, not a trained policy) | yes |
 | Process-reward / verifier-guided search | partial (selection, not allocation) | no | partial | yes |
@@ -18,11 +19,14 @@
 
 The closest neighbors are **compute-optimal inference** (Snell et al., arXiv:2408.03314 — which shows the optimal parallel-vs-sequential split *flips with difficulty*, the result the `difficulty` feature conditions on) and **Thompson-sampling tree search** (AB-MCTS, generalized here by the v0 `BanditAllocator` with added DECOMPOSE / ESCALATE / STOP arms and value-per-cost scoring). The distinguishing claims are: (a) the decision is a *learned* policy, not a fixed rule or a search procedure; (b) it optimizes *cost-per-solved*, not accuracy alone; (c) it improves from the agent's own traces and persists across runs.
 
+**Grain: per-step allocation vs per-task selection.** The sharpest contrast is with *learned workflow selection* — pick one whole strategy per task and let a bandit learn which strategy wins. That is coarser (one choice per task, strategy fixed for the whole episode) and usually optimizes accuracy. This controller decides the *next compute action* at each step, so it can decompose one sub-problem, escalate another, and abstain on a third inside a single task, and it is scored on cost. The two are complementary, not rivals: per-task selection could choose the pipeline; per-step allocation governs the spend within it. Both approaches, run honestly, hit the same wall — learned selection/allocation tends to **tie the best fixed choice when the headroom is thin** — which is why this project leans on the *cost* axis (where it has a resolved win) rather than claiming a solve-rate separation it has not earned.
+
 ## What this is NOT
 
 - **Not a claim that one learner is best.** The honest finding is objective *robustness* and the credit/normalization bugs that break it (see the README results), not a single winning algorithm.
 - **Not a general accuracy knob.** Better allocation of one model cannot exceed that model's capability ceiling; that is exactly what the ESCALATE cascade is for.
-- **Not a powered claim on tau-bench.** The powered comparison is the calibrated arithmetic suite; tau-bench is the realism / transfer check.
+- **Not a resolved solve-rate win over the best fixed action.** Run on the calibrated suite, the controller **ties** always-DECOMPOSE at n=44; on a multi-heavy split it is the *top* policy by solve but not resolved. The resolved fixed-bar win is the cross-model **cascade**, not single-model allocation.
+- **Not a cost win on every benchmark.** On tau-bench retail the cascade is a documented **null** — the cheap model is too weak there, so it escalates nearly everything and lands at strong-only cost. The clean real-task result is **text-to-SQL** (free execution-match grader), where the controller learns WIDER→DECOMPOSE and raises solve at lower cost.
 
 ## The baselines the controller is measured against
 
