@@ -25,9 +25,9 @@ cost and solve-rate claim is resolved, not eyeballed.
 
 Three live results, reported with their honest verdicts:
 1. **Real text-to-SQL (the clearest one):** the loop learns an interpretable allocation
-   strategy from its own traces — it flips from writing SQL cold (0/8 solved) to
-   schema-grounded DECOMPOSE (6/8) by round 2, at *lower* cost, graded by free
-   execution-match.
+   strategy from its own traces — it shifts from writing SQL cold (cold-start 0–2/8) to
+   schema-grounded DECOMPOSE (**5–6/8 across two seeds**) by round 2, at *lower* cost,
+   graded by free execution-match.
 2. **Weak->strong cascade (the resolved cost win):** a cheap model that retries once then
    escalates only what it still fails reaches a stronger model's solve rate at **36-47%
    lower mean cost across two seeds**, beating always-use-the-strong-model with a
@@ -51,6 +51,29 @@ self-improvement curve: collect traces with the current policy, fit the next
 policy from those traces, measure, repeat.
 
 ## How self-improvement works here
+
+```mermaid
+flowchart TD
+    subgraph inner["Per-task allocation loop — one task, until solve / STOP / budget"]
+        F["cheap features<br/>score_max, depth, budget left, difficulty, attempts..."]
+        F --> A{"Allocator<br/>decide action"}
+        A -->|WIDER / DEEPER / DECOMPOSE| EXC["Executor — cheap model<br/>(via OpenRouter)"]
+        A -->|ESCALATE| EXS["Executor — stronger model"]
+        A -->|STOP| T["terminal: best answer or abstain"]
+        EXC --> SC["Verifier: process + terminal grade<br/>CostLedger: tokens / latency / $"]
+        EXS --> SC
+        SC --> F
+        SC --> T
+    end
+
+    B0["Round 0: bandit cold-start (no data)"] --> inner
+    inner --> TR["logged traces"]
+    TR --> CR["assign_credit<br/>value_per_cost = terminal × cost_efficiency × advantage"]
+    CR --> FIT["fit next policy: BC / DPO / KTO<br/>(GRPO estimated)"]
+    FIT -->|next round collects with the improved policy| inner
+    TR --> EV["held-out greedy eval"]
+    EV --> CV["self-improvement curve:<br/>solve & cost per round + measurement layer"]
+```
 
 1. Round 0: the `BanditAllocator` cold-starts with no data (Thompson sampling over
    per-action value-per-cost) and collects traces.
@@ -210,7 +233,7 @@ runs all of this offline on collected traces.
 
 | result | benchmark | headline | resolved? |
 |--------|-----------|----------|-----------|
-| Self-improvement learns the right action | real text-to-SQL (free exec-match) | 0/8 → **6/8** eval solve, WIDER→DECOMPOSE, lower cost | directional (n=8) |
+| Self-improvement learns the right action | real text-to-SQL (free exec-match) | cold-start 0–2/8 → **5–6/8** eval solve (2 seeds), WIDER→DECOMPOSE, lower cost | directional (n=8/seed) |
 | Weak→strong cascade | arithmetic (2 seeds) | matches strong-model solve at **36–47% lower mean cost**; beats always-strong | **yes** (paired CI excludes 0) |
 | Single-model allocation | calibrated arithmetic | ~40% cheaper than the exploring cold-start; **ties** the best fixed action | tie at n=44 |
 
@@ -389,19 +412,20 @@ deterministic reward, and the agent's only billable calls are its own (the SQL r
 cost ledger is clean). Running the self-improvement loop (Haiku-4.5, 20 questions, 8-task held-out
 eval):
 
-| round | policy | eval solve | mean cost | what it does |
-|-------|--------|------------|-----------|--------------|
-| 0 | bandit | 0/8 | $0.0145 | all WIDER (write SQL cold) |
-| 1 | dpo | 0/8 | $0.0142 | still mostly WIDER |
-| 2 | dpo | **6/8** | **$0.0113** | **all DECOMPOSE** (explore schema, then compose) |
+| round | policy | eval solve (seed 0 / seed 1) | mean cost | what it does |
+|-------|--------|------------------------------|-----------|--------------|
+| 0 | bandit | 0/8 · 2/8 | ~$0.014 | mostly WIDER (write SQL cold) |
+| 1 | dpo | 0/8 · 0/8 | ~$0.014 | still WIDER |
+| 2 | dpo | **6/8 · 5/8** | **~$0.012** | **DECOMPOSE-heavy** (explore schema, then compose) |
 
 The controller **learns an interpretable allocation lesson from its own traces**: writing SQL cold
-(WIDER) solves nothing here, so by round 2 it flips to DECOMPOSE — ground the query in the schema
-first — reaching 6/8 *and* spending less. The learned policy is genuinely deployable: `--save-policy`
-writes it and `serve_policy.py` loads it frozen and returns `decompose` with no training or trace
-store. Caveats: n=8 eval is small (wide Wilson interval) and execution-match is strict; this is a
-single-seed demonstration that learning shifted the policy to the right action on a real task, not a
-powered benchmark number.
+(WIDER) solves little here, so by round 2 it shifts toward DECOMPOSE — ground the query in the schema
+first — reaching 5–6/8 across two seeds *and* spending less, up from the cold-start bandit's 0–2/8.
+The learned policy is genuinely deployable: `--save-policy` writes it and `serve_policy.py` loads it
+frozen and returns `decompose` with no training or trace store. Caveats: n=8 eval/seed is small (wide
+Wilson interval), execution-match is strict, and the round-1→round-2 path is non-monotonic (round 1
+dipped to 0/8 both seeds before round 2 recovered) — so this is a directional, two-seed demonstration
+that learning shifted the policy to the right action on a real task, not a powered benchmark number.
 
 ### What we learned (and where it does not work)
 
