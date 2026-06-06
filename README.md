@@ -230,9 +230,28 @@ policy, but not resolvably so. Two honest reasons, both real: on this suite one 
 tasks, so the spend-actions are nearly interchangeable (all 36–37/44) and the allocation headroom is
 thin; and n=44 is underpowered (see `metrics.reliability.tasks_needed`). So the ~40% above is a
 genuine gain *over the exploring cold-start*, not evidence that learning beats the best hand-picked
-fixed strategy — on this suite it **ties** it. The one place a learned policy *does* clear a fixed
-bar is the cascade below: it beats always-use-the-strong-model with a paired-cost CI that excludes
-zero.
+fixed strategy — on this suite it **ties** it.
+
+The tie above is partly a benchmark artifact (atomic-heavy, so the actions barely differ), so the
+test was re-run on a **multi-part-heavy split where the action choice actually matters** (a single
+attempt tends to drop a term on 5-part tasks, so DECOMPOSE should pay off). There the picture moves
+toward the learned policy:
+
+| policy (multi-heavy, 32-task eval) | solve | mean cost |
+|------------------------------------|-------|-----------|
+| always-WIDER | 24/32 | $0.00194 |
+| always-DEEPER | 25/32 | $0.00188 |
+| always-DECOMPOSE (best fixed) | 26/32 | $0.00183 |
+| bandit / LinUCB | 27/32 | — |
+| **learned DPO** | **28/32** | $0.00196 |
+
+**On the allocation-sensitive split the learned DPO is the single best policy by solve rate** —
+28/32, above every fixed action and both bandits. But it is *still not statistically resolved*:
+28 vs 26 is a two-task gap (McNemar p=0.69), and resolving a ~6-point solve difference would take a
+few hundred tasks per arm. So the honest verdict across both splits: the controller never loses to
+the best fixed action, and *wins on the point estimate exactly where allocation matters*, but the
+separation is not resolved at feasible n. The one learned result that **does** clear a fixed bar at
+a resolved CI is the cascade below (beats always-use-the-strong-model, paired-cost CI excludes zero).
 
 To be precise about what "same accuracy" means: the learned policy and the cold-start baseline
 are compared head-to-head on the identical 44 tasks, and neither solves more than the other
