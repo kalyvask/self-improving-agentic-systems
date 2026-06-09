@@ -225,7 +225,12 @@ runs all of this offline on collected traces.
 - **Verifier alt-test (`alt_test.py`).** The controller acts on a cheap process
   verifier. The alternative-annotator test turns "is this judge good enough to act
   on" into a pass/fail verdict against the ground-truth terminal verifier, rather
-  than an uncalibrated agreement number.
+  than an uncalibrated agreement number. *Honest caveat:* it is **only valid on
+  partial-trajectory traces**. On completed-answer traces the runner stores the exact
+  terminal grade as the process score, so the test becomes circular and trivially
+  passes (`analyze_eval.py --verifier` prints this warning). It is implemented and
+  available, but has not yet been run on a trace set where it is non-circular, so treat
+  it as a built diagnostic, not a validated result.
 
 ## Results
 
@@ -252,7 +257,9 @@ spends more because it samples expensive actions to explore). Accuracy is not th
 moves: paired solve is **0.841 vs 0.841**, statistically tied (McNemar p=1.0, neither side wins a
 single task net), while the paired per-task cost delta is **−0.001 [−0.002, −0.001] (95% bootstrap
 CI excludes 0 → resolved)**. Cost is the metric with power at n=44; the learned policy spends it
-better, with a balanced WIDER/DEEPER/DECOMPOSE/STOP mix.
+better, with a balanced WIDER/DEEPER/DECOMPOSE/STOP mix. (Caveat: this cost CI is a **single seed**
+on one 110-task split; the cascade and SQL results below use two seeds. And as the fixed-baseline
+test below shows, this win is over the *cold-start*, not over the best fixed action.)
 
 ![Cost / solve frontier](artifacts/cost_solve_frontier.png)
 *Mean cost (x) vs solve rate (y), greedy eval. The learned DPO policy sits directly left of the
@@ -326,7 +333,9 @@ classifying every miss as premature-STOP / recoverable / capability-ceiling) sho
 benchmarks have **no capability ceiling** — Haiku-4.5 solves all of them with or without a
 calculator, so escalation has nothing to add. The capability gap isn't in the tasks, it's in the
 *model*: the cascade runs **claude-3-haiku** (cheap) and escalates to **Haiku-4.5** (strong) on a
-no-calculator arithmetic tier where the cheap model genuinely fails a fraction.
+no-calculator arithmetic tier where the cheap model genuinely fails a fraction. (Note: `claude-3-haiku`
+is a now-deprecated model, so these exact numbers are a dated snapshot; the *mechanism* and the
+boundary condition are what generalize, not the specific cents.)
 
 Two findings, both from measurement catching a wrong default:
 
@@ -423,10 +432,15 @@ The controller **learns an interpretable allocation lesson from its own traces**
 (WIDER) solves little here, so by round 2 it shifts toward DECOMPOSE — ground the query in the schema
 first — reaching 5–6/8 across two seeds *and* spending less, up from the cold-start bandit's 0–2/8.
 The learned policy is genuinely deployable: `--save-policy` writes it and `serve_policy.py` loads it
-frozen and returns `decompose` with no training or trace store. Caveats: n=8 eval/seed is small (wide
-Wilson interval), execution-match is strict, and the round-1→round-2 path is non-monotonic (round 1
-dipped to 0/8 both seeds before round 2 recovered) — so this is a directional, two-seed demonstration
-that learning shifted the policy to the right action on a real task, not a powered benchmark number.
+frozen and returns `decompose` with no training or trace store. Caveats, stated plainly: n=8 eval/seed
+is small (wide Wilson interval); execution-match is strict; the round-1→round-2 path is non-monotonic
+(round 1 dipped to 0/8 both seeds before round 2 recovered); train and eval **share one database
+schema** (this is within-schema behaviour change, not cross-schema generalization); and — importantly
+— the [best-fixed-action bar](#what-we-learned-and-where-it-does-not-work) has **not** been run here,
+so this shows the controller *learns the productive action (DECOMPOSE)*, not that it beats
+always-DECOMPOSE. It is a directional, two-seed demonstration that learning shifted the policy to the
+right action on a real task, in the same honest class as the arithmetic result — not a powered
+benchmark number or a separation claim.
 
 ### What we learned (and where it does not work)
 
