@@ -3,7 +3,7 @@
 # Models served via OpenRouter (https://openrouter.ai/models).
 models:
   # Strong model used for editing/debugging/final answers.
-  executor: "anthropic/claude-opus-4-7"
+  executor: "anthropic/claude-opus-4-8"
   # Cheap model used for broad context reads and the decompose planner.
   cheap: "anthropic/claude-haiku-4-5"
   # Process scorer / LM-judge for non-terminal node values (optional).

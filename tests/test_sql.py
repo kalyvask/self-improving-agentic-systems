@@ -5,7 +5,12 @@ import sqlite3
 
 import pytest
 
-from wdp.benchmarks.sql import SqlBenchmark, _run_select
+from wdp.benchmarks.sql import SqlBenchmark, SqlVerifier, _run_select
+
+
+class _T:  # minimal task stand-in carrying metadata
+    def __init__(self, m):
+        self.metadata = m
 
 
 def _make_db(tmp_path) -> str:
@@ -57,6 +62,33 @@ def test_order_matters_only_when_gold_has_order_by(tmp_path):
     assert v.score_final(T(ordered), "SELECT name FROM items ORDER BY price").value == 1.0
     # no ORDER BY in gold -> compared as a set, order-insensitive
     assert v.score_final(T(unordered), "SELECT name FROM items ORDER BY name DESC").value == 1.0
+
+
+def test_grader_is_type_and_null_aware(tmp_path):
+    db = _make_db(tmp_path)
+    v = SqlBenchmark(db, []).terminal_verifier()
+    # int 20 vs text '20' must NOT execution-match (the old str() collapse called them equal)
+    ti = _T({"db_path": db, "gold_sql": "SELECT 20"})
+    assert v.score_final(ti, "SELECT 20").value == 1.0
+    assert v.score_final(ti, "SELECT '20'").value == 0.0
+    # NULL vs '' must NOT match
+    tn = _T({"db_path": db, "gold_sql": "SELECT NULL"})
+    assert v.score_final(tn, "SELECT NULL").value == 1.0
+    assert v.score_final(tn, "SELECT ''").value == 0.0
+
+
+def test_row_limit_overflow_is_a_failure_not_a_prefix_match(tmp_path):
+    db = _make_db(tmp_path)  # items has 3 rows
+    v = SqlVerifier(db, row_limit=2)
+    t = _T({"db_path": db, "gold_sql": "SELECT id FROM items"})  # 3 rows > limit
+    assert v.score_final(t, "SELECT id FROM items").value == 0.0  # overflow -> graded failure
+    with pytest.raises(Exception):
+        _run_select(db, "SELECT id FROM items", 2)
+
+
+def test_semicolon_inside_a_string_literal_is_allowed(tmp_path):
+    db = _make_db(tmp_path)
+    assert _run_select(db, "SELECT 'a;b'", 200) == [("a;b",)]
 
 
 def test_tasks_carry_schema_and_gold(tmp_path):

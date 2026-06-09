@@ -19,7 +19,7 @@ import numpy as np
 
 from wdp.allocator.policy import Allocator, Decision, NodeFeatures
 from wdp.allocator.linear import LinearSoftmaxPolicy
-from wdp.allocator.bc import ACTIONS, _INDEX, BCAllocator, _choose
+from wdp.allocator.bc import ACTIONS, BCAllocator, _choose
 
 
 class GRPOAllocator(Allocator):

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from wdp.allocator.policy import Action, Allocator, Decision, NodeFeatures
+from wdp.allocator.policy import Allocator, Decision, NodeFeatures
 from wdp.allocator.linear import LinearSoftmaxPolicy
 from wdp.allocator.bc import ACTIONS, _INDEX, BCAllocator, _choose
 

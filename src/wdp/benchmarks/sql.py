@@ -40,22 +40,30 @@ def _connect_ro(db_path: str) -> sqlite3.Connection:
 
 
 def _run_select(db_path: str, sql: str, row_limit: int) -> list[tuple]:
-    """Run a single read-only SELECT, returning up to row_limit rows. Raises on any
-    non-SELECT, multiple statements, or execution error."""
+    """Run a single read-only SELECT, returning its rows. Raises on a non-SELECT, an
+    execution error, or a result set that exceeds row_limit (an overflow must be a
+    graded failure, never a silent truncated prefix that could false-match)."""
     s = (sql or "").strip().rstrip(";")
     if not _SELECT_RE.match(s):
         raise ValueError("only a single SELECT statement is allowed")
-    if ";" in s:
-        raise ValueError("multiple statements are not allowed")
+    # NOTE: do not substring-check for ';' -- a ';' inside a string literal is legal,
+    # and sqlite3.Connection.execute already rejects genuine multi-statements.
     con = _connect_ro(db_path)
     try:
-        return list(con.execute(s).fetchmany(row_limit))
+        rows = con.execute(s).fetchmany(row_limit + 1)
+        if len(rows) > row_limit:
+            raise ValueError(f"result set exceeds row_limit={row_limit}")
+        return list(rows)
     finally:
         con.close()
 
 
 def _canon(rows: list[tuple], ordered: bool) -> list[tuple]:
-    norm = [tuple("" if c is None else str(c) for c in row) for row in rows]
+    """Canonicalize a result set for execution-match. Uses repr() per cell so the
+    comparison is TYPE- and NULL-aware: None, 10, '10', and 10.0 are all distinct
+    (the old str()-with-''-for-None collapsed NULL==''​ and 10=='10', which could
+    silently emit a false 1.0)."""
+    norm = [tuple(repr(c) for c in row) for row in rows]
     return norm if ordered else sorted(norm)
 
 
