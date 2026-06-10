@@ -32,3 +32,9 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 src = ["src", "tests"]
+
+[tool.ruff.lint.per-file-ignores]
+# The arithmetic task generator deliberately packs each construction rule onto one
+# line as `n = ...; lines.append(...); val ...` — splitting these 3x would triple the
+# generator's length for no readability gain. E702 (multiple-statements) is waived here only.
+"src/wdp/benchmarks/arithmetic.py" = ["E702"]

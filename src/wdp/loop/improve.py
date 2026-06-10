@@ -15,7 +15,7 @@ traces are what the end-of-project GRPO estimate extrapolates from.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from wdp.allocator.policy import BanditAllocator
 from wdp.allocator.bc import BCAllocator

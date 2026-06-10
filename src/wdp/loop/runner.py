@@ -118,7 +118,6 @@ def run_task(
     # back to the 1-first_process_score proxy inside _features when not provided.
     task_difficulty = difficulty_fn(task) if difficulty_fn is not None else None
 
-    best_answer: str | None = None
     best_terminal = 0.0
 
     for step in range(cfg.max_decisions):
@@ -255,7 +254,7 @@ def run_task(
                       else terminal.score_final(task, new_traj.final_answer).value)
                 ps = tv
                 if tv >= best_terminal:
-                    best_terminal, best_answer = tv, new_traj.final_answer
+                    best_terminal = tv
             else:
                 ps = verifier.score_step(task, new_traj.transcript(), ledger=ledger).value
             process_scores.append(ps)

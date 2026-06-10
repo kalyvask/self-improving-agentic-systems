@@ -17,9 +17,9 @@ from wdp.planner.decompose import Planner
 from wdp.verifier.scorer import LLMProcessVerifier, Score
 from wdp.allocator.policy import BanditAllocator, Action
 from wdp.loop.runner import RunConfig, run_task, run_round
-from wdp.loop.trace import TaskTrace, TraceLog, assign_credit, DecisionRecord
+from wdp.loop.trace import TaskTrace, TraceLog, DecisionRecord
 from wdp.metrics import (
-    success_at_budget, pass_hat_k, pass_at_k, risk_coverage, cvar,
+    pass_hat_k, pass_at_k, risk_coverage, cvar,
     generation_verification_gap, summarize_round,
 )
 

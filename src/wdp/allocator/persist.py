@@ -17,7 +17,7 @@ import numpy as np
 from wdp.allocator.bc import ACTIONS
 from wdp.allocator.linear import LinearSoftmaxPolicy
 from wdp.allocator.policy import (
-    Action, Allocator, BanditAllocator, BANDIT_ARMS, Decision, NodeFeatures,
+    Allocator, BanditAllocator, BANDIT_ARMS, Decision, NodeFeatures,
 )
 
 SCHEMA = 1

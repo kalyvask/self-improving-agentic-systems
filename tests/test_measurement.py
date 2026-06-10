@@ -6,7 +6,6 @@ task difficulty ordering -- so the numbers in the writeup are reproducible.
 """
 from __future__ import annotations
 
-import math
 
 from wdp.metrics.reliability import (
     wilson_ci, min_detectable_effect, tasks_needed, mcnemar, paired_diff_ci,

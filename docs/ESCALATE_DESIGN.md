@@ -1,5 +1,5 @@
 <!-- Design note for the ESCALATE capstone (task #54). Offline reasoning only; no
-     live spend was incurred writing this. Pairs with RESEARCH_STATE.md. -->
+     live spend was incurred writing this. -->
 
 # ESCALATE capstone: offline-Opus-labeling design
 

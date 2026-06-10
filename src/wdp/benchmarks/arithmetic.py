@@ -200,7 +200,8 @@ class ArithmeticBenchmark:
         # Tier 3 adds a third nesting level so one careless WIDER pass is unlikely to
         # track it -- that is where DEEPER refinement should start to pay off.
         for i in range(self.n_atomic):
-            r = lambda: rng.randint(2, 20)
+            def r() -> int:
+                return rng.randint(2, 20)
             tier = i % 4
             if tier == 0:                                   # easy: one operation
                 expr = rng.choice([f"{r()} + {r()}", f"{r()} * {r()}"])
