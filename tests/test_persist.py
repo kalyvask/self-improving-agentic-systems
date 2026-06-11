@@ -59,3 +59,30 @@ def test_refuses_to_save_unfitted_policy(tmp_path):
     p = LinearSoftmaxPolicy(n_features=len(NodeFeatures.names()), n_actions=len(ACTIONS))
     with pytest.raises(ValueError):
         save_policy(FrozenLinearAllocator(p), tmp_path / "x.json")
+
+
+def test_shipped_policy_artifacts_load_and_decide():
+    """The README quickstart promises the committed policies work offline; pin it."""
+    import pathlib
+
+    root = pathlib.Path(__file__).resolve().parents[1] / "artifacts" / "policies"
+    feats = NodeFeatures(score_max=0.0, n_children=1, difficulty=0.9,
+                         budget_remaining_frac=0.05)
+    for name in ("arith_dpo_policy.json", "sql_dpo_policy.json"):
+        alloc = load_policy(root / name)
+        d = alloc.decide(feats, "dollars")
+        assert d.action.value in {"wider", "deeper", "decompose", "stop", "escalate"}
+    # The specific behaviours the README narrates:
+    arith = load_policy(root / "arith_dpo_policy.json")
+    assert arith.decide(feats, "dollars").action.value == "stop"
+    sql = load_policy(root / "sql_dpo_policy.json")
+    assert sql.decide(feats, "dollars").action.value == "decompose"
+
+
+def test_package_exposes_embed_seam():
+    """`from wdp import NodeFeatures, load_policy` is the documented public API."""
+    import wdp
+
+    for name in ("load_policy", "save_policy", "NodeFeatures", "FrozenLinearAllocator",
+                 "Action", "Decision"):
+        assert hasattr(wdp, name), name

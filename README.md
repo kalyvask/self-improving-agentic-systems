@@ -50,6 +50,35 @@ The Allocator learns from its own logged traces, so the headline result is a
 self-improvement curve: collect traces with the current policy, fit the next
 policy from those traces, measure, repeat.
 
+## Try it in 60 seconds (no API key)
+
+The repo ships two trained policies in [artifacts/policies/](artifacts/policies/) so you can watch
+the controller allocate without spending anything: `arith_dpo_policy.json` (refit offline from the
+calibrated arithmetic run's training traces — context-sensitive: WIDER fresh, STOP when the budget
+is nearly gone on a hard task) and `sql_dpo_policy.json` (the text-to-SQL policy — decisive: DECOMPOSE
+nearly everywhere, because "ground the query in the schema first" is the lesson it learned).
+
+```bash
+pip install -e .
+python examples/embed_policy.py        # three states of a task's life -> decisions from both policies
+wdp-decide --policy artifacts/policies/arith_dpo_policy.json \
+    --n-children 1 --difficulty 0.9 --budget-remaining 0.05   # -> stop
+```
+
+Embedding it in your own agent loop is the same three calls — `load_policy()` once, then per
+step build a `NodeFeatures` from your agent's state and ask `decide()`:
+
+```python
+from wdp import NodeFeatures, load_policy
+
+alloc = load_policy("artifacts/policies/sql_dpo_policy.json")
+feats = NodeFeatures(score_max=0.2, n_children=2, difficulty=0.6, budget_remaining_frac=0.5)
+print(alloc.decide(feats, "dollars").action.value)   # wider / deeper / decompose / stop / escalate
+```
+
+Your loop stays yours; the policy only answers "what should this task get next." Training your
+own policy on your own traces is the `--save-policy` flag on any run (see [Run](#run)).
+
 ## How self-improvement works here
 
 ```mermaid

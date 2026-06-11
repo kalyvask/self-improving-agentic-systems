@@ -11,3 +11,18 @@ Layers:
 """
 
 __version__ = "0.1.0"
+
+# Public embed seam: load a trained policy, hand it your agent's NodeFeatures, get an
+# allocation decision back. Everything else (executor, runner, benchmarks) is optional.
+from wdp.allocator.persist import FrozenLinearAllocator, load_policy, save_policy  # noqa: E402
+from wdp.allocator.policy import Action, Decision, NodeFeatures  # noqa: E402
+
+__all__ = [
+    "Action",
+    "Decision",
+    "FrozenLinearAllocator",
+    "NodeFeatures",
+    "load_policy",
+    "save_policy",
+    "__version__",
+]
